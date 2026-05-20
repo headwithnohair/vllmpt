@@ -30,13 +30,14 @@
         <java.version>21</java.version>
         <spring-boot.version>4.0.6</spring-boot.version>
         <lombok.version>1.18.46</lombok.version>
-        <redission.version>4.4.0</redission.version>
+        <redisson.version>4.4.0</redisson.version>
         <jjwt.version>0.13.0</jjwt.version>
         <mybatis-plus.version>3.5.15</mybatis-plus.version>
         <hutool.version>5.8.44</hutool.version>
         <commons-lang3.version>3.20.0</commons-lang3.version>
         <rabbitMQ.version>5.30.0</rabbitMQ.version>
         <elasticsearch.version>9.4.1</elasticsearch.version>
+        <minio.version>9.0.0</minio.version>
     </properties>
     <dependencies>
         <dependency>
@@ -105,13 +106,18 @@
         </dependency>
 
         <!-- ========== 中间件客户端 ========== -->
+        <!-- Redis - Spring Data Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Redisson Redis客户端 -->
         <dependency>
             <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
+            <artifactId>redisson</artifactId>
             <version>${redisson.version}</version>
         </dependency>
-
         <!-- ========== 安全认证 ========== -->
         <!-- Spring Security -->
         <dependency>
@@ -141,12 +147,12 @@
 
         <!-- ========== 文件存储 ========== -->
         <!-- MinIO -->
+
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>9.0.0</version>
+            <version>${minio.version}</version>
         </dependency>
-
         <!-- ========== API 文档 ========== -->
         <!-- SpringDoc OpenAPI (Swagger) -->
         <dependency>

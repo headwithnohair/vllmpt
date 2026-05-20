@@ -1,0 +1,103 @@
+# ==========================================
+# 开发环境配置 - development profile
+# ==========================================
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/vllmpt_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 600000
+      connection-timeout: 30000
+      max-lifetime: 1800000
+  
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 3000ms
+  
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 5
+        max-concurrency: 10
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000ms
+        max-attempts: 3
+        max-interval: 10000ms
+        multiplier: 2
+
+# MinIO 配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minio123
+  bucket-name: vllmpt-images
+  secure: false
+
+# Elasticsearch 配置
+elasticsearch:
+  hosts: localhost:9200
+  username: elastic
+  password: elastic123
+  connection-timeout: 5s
+  socket-timeout: 30s
+
+# 硅基流动 API 配置（开发环境使用测试 Key）
+siliconflow:
+  api-key: sk-test-your-api-key-here
+  base-url: https://api.siliconflow.cn/v1
+  timeout: 30s
+
+# 日志配置 - 开发环境详细日志
+logging:
+  level:
+    root: INFO
+    org.albedo: DEBUG
+    org.springframework.web: INFO
+    com.baomidou.mybatisplus: DEBUG
+    org.apache.ibatis: DEBUG
+    org.redisson: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/vllmpt-dev.log
+
+# Actuator 监控 - 开发环境开启所有端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+# Swagger - 开发环境始终开启
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+# Spring Security 配置 - 开发环境关闭安全验证

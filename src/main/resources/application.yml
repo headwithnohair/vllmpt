@@ -1,0 +1,120 @@
+# ==========================================
+# 主配置文件 - 公共配置（所有环境共享）
+# ==========================================
+spring:
+  profiles:
+    active: dev  # 默认使用开发环境，可通过 --spring.profiles.active=prod 切换
+  application:
+    name: vllmpt
+
+  # Jackson 配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+
+# 服务器配置
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: org.albedo.vllmpt.**.model.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Swagger/OpenAPI 配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+# Actuator 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    org.albedo: DEBUG
+    org.springframework.web: INFO
+    com.baomidou.mybatisplus: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/${spring.application.name}.log
+    max-size: 100MB
+    max-history: 30
+
+# AI 服务通用配置
+ai:
+  # 模型注册表
+  models:
+    - model-id: "Qwen/Qwen2.5-72B-Instruct"
+      model-name: "Qwen 72B"
+      type: TEXT
+      scenes: [ GENERAL, CUSTOMER_SERVICE, COPYWRITING ]
+      price-per-token: 0.004
+      max-tokens: 8192
+      avg-response-time: 2.5
+      priority: 1
+      enabled: true
+
+    - model-id: "Qwen/Qwen2-VL-72B-Instruct"
+      model-name: "Qwen VL 72B"
+      type: MULTIMODAL
+      scenes: [ GENERAL, PRODUCT_ANALYSIS, IMAGE_AUDIT ]
+      price-per-token: 0.006
+      max-tokens: 8192
+      avg-response-time: 3.0
+      priority: 1
+      enabled: true
+
+  # 路由策略配置
+  routing:
+    strategy: PRIORITY  # PRIORITY / COST_OPTIMIZED / PERFORMANCE / LOAD_BALANCE
+
+  # 缓存配置
+  cache:
+    enabled: true
+    ttl: 3600  # 1小时
+    exclude-scenes: [ COPYWRITING ]
+
+  # 降级配置
+  fallback:
+    enabled: true
+    max-retries: 2
+    retry-delay: 1000  # 毫秒
+
+
