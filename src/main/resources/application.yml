@@ -116,5 +116,21 @@ ai:
     enabled: true
     max-retries: 2
     retry-delay: 1000  # 毫秒
+langchain4j:
+  open-ai:
+    chat-model:
+      # 硅基流动的 API 地址
+      base-url: https://api.siliconflow.cn/v1
+      # 您的 API Key
+      api-key: sk-nktsiofmjpxazhrkmoporjwewoocdxwszxfcfskflciyhbrr
+      # 默认模型（可以动态切换）
+      model-name: Qwen/Qwen2.5-72B-Instruct
+      # 超时配置
+      timeout: PT30S
+      # 温度参数
+      temperature: 0.7
+      # 最大 Token
+      max-tokens: 8192
+
 
 

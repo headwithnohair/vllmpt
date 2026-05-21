@@ -46,6 +46,22 @@
             <version>${rabbitMQ.version}</version>
             <scope>compile</scope>
         </dependency>
+        <!-- ========== LangChain4j AI 框架（稳定版 0.35.0）========== -->
+        <!-- Spring Boot Starter（核心，包含自动配置） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-spring-boot-starter</artifactId>
+            <version>0.35.0</version>
+        </dependency>
+
+        <!-- OpenAI 兼容模型支持（硅基流动使用 OpenAI 格式） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+            <version>0.35.0</version>
+        </dependency>
+
+
         <dependency>
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>

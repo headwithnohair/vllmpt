@@ -69,11 +69,31 @@ siliconflow:
   base-url: https://api.siliconflow.cn/v1
   timeout: 30s
 
+# LangChain4j 配置（0.35.0 版本）
+langchain4j:
+  open-ai:
+    chat-model:
+      # 硅基流动 API 地址
+      base-url: https://api.siliconflow.cn/v1
+      # API Key（从环境变量读取，如果没有则使用默认值）
+      api-key: ${SILICONFLOW_API_KEY:sk-test-your-api-key-here}
+      # 默认模型
+      model-name: Qwen/Qwen2.5-72B-Instruct
+      # 超时时间
+      timeout: PT30S
+      # 温度参数（0-1，越高越创意）
+      temperature: 0.7
+      # 最大 Token 数
+      max-tokens: 8192
+      # 顶部采样
+      top-p: 0.9
+
 # 日志配置 - 开发环境详细日志
 logging:
   level:
     root: INFO
     org.albedo: DEBUG
+    dev.langchain4j: DEBUG
     org.springframework.web: INFO
     com.baomidou.mybatisplus: DEBUG
     org.apache.ibatis: DEBUG
