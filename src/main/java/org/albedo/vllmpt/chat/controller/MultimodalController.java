@@ -2,6 +2,7 @@ package org.albedo.vllmpt.chat.controller;
 
 
 import org.albedo.vllmpt.ai.service.MultimodalAssistant;
+import org.albedo.vllmpt.chat.model.dto.MultimodalChatRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,11 +20,8 @@ public class MultimodalController {
      * 单图对话
      */
     @PostMapping("/single-image")
-    public Map<String, String> chatWithImage(@RequestBody Map<String, String> request) {
-        String text = request.get("text");
-        String imageUrl = request.get("imageUrl");
-
-        String response = multimodalAssistant.chatWithImage(text, imageUrl);
+    public Map<String, String> chatWithImage(@RequestBody MultimodalChatRequest request) {
+        String response = multimodalAssistant.chatWithImage(request.getText(), request.getImageUrl());
         return Map.of("response", response);
     }
 
@@ -31,11 +29,8 @@ public class MultimodalController {
      * 多图对话
      */
     @PostMapping("/multiple-images")
-    public Map<String, String> chatWithMultipleImages(
-            @RequestBody Map<String, Object> request) {
-        String text = (String) request.get("text");
-        List<String> imageUrls = (List<String>) request.get("imageUrls");
-        String response = multimodalAssistant.chatWithMultipleImages(text, imageUrls);
+    public Map<String, String> chatWithMultipleImages(@RequestBody MultimodalChatRequest request) {
+        String response = multimodalAssistant.chatWithMultipleImages(request.getText(), request.getImageUrls());
         return Map.of("response", response);
     }
 }

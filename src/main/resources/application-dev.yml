@@ -74,11 +74,11 @@ langchain4j:
   open-ai:
     chat-model:
       # 硅基流动 API 地址
-      base-url: https://api.siliconflow.cn/v1
+      base-url: https://api.siliconflow.cn
       # API Key（从环境变量读取，如果没有则使用默认值）
       api-key: sk-nktsiofmjpxazhrkmoporjwewoocdxwszxfcfskflciyhbrr
       # 默认模型
-      model-name: Qwen/Qwen2.5-72B-Instruct
+      model-name: Qwen/Qwen3.6-35B-A3B
       # 超时时间
       timeout: PT30S
       # 温度参数（0-1，越高越创意）

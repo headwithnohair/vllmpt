@@ -6,6 +6,7 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
+import org.albedo.vllmpt.file.service.FileUploadService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -23,8 +24,14 @@ public class MultimodalAssistant {
     @Autowired
     private ChatLanguageModel chatModel;
 
+    @Autowired(required = false)
+    private FileUploadService fileUploadService;
+
     public String chatWithImage(String text,String imageUrl){
         log.info("处理多模态请求 - 文本: {}, 图片: {}", text, imageUrl);
+        
+        // 直接使用原始 URL（不转存到 MinIO）
+        // 原因：MinIO 的 localhost URL 云端 API 无法访问
         UserMessage message = UserMessage.from(
                 TextContent.from(text),
                 ImageContent.from(imageUrl)
@@ -39,23 +46,23 @@ public class MultimodalAssistant {
      * 处理多张图片 + 文本
      */
     public String chatWithMultipleImages(String text, List<String> imageUrls) {
+        log.info("处理多模态请求 - 文本: {}, 图片: {}", text, imageUrls);
         TextContent textContent = TextContent.from(text);
 
-        // 2. 将所有图片URL或Base64数据转换为ImageContent对象列表
-        // 你可以混合使用URL和Base64数据，只要每个ImageContent都能正确构建即可。
+        // 直接使用原始 URL 列表（不转存到 MinIO）
         List<ImageContent> imageContentList = imageUrls.stream()
-                .map(ImageContent::from)      // 假设图片是URL格式，直接转换
+                .map(ImageContent::from)
                 .toList();
 
-        // 3. 将所有Content（文本+图片）组合成一个列表
+        // 将所有Content（文本+图片）组合成一个列表
         List<Content> contents = new ArrayList<>();
         contents.add(textContent);
         contents.addAll(imageContentList);
 
-        // 4. 用内容列表创建UserMessage
+        // 用内容列表创建UserMessage
         UserMessage userMessage = UserMessage.from(contents);
 
-        // 5. 发送消息并获取回复
+        // 发送消息并获取回复
         String response = chatModel.generate(userMessage).content().text();
 
         log.info("多模态响应完成");
