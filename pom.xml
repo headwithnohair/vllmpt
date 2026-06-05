@@ -54,11 +54,11 @@
             <version>0.35.0</version>
         </dependency>
 
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId> langchain4j-redis </artifactId>
-            <version>0.35.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>dev.langchain4j</groupId>-->
+<!--            <artifactId> langchain4j-redis </artifactId>-->
+<!--            <version>0.35.0</version>-->
+<!--        </dependency>-->
 
 
         <!-- OpenAI 兼容模型支持（硅基流动使用 OpenAI 格式） -->
@@ -204,6 +204,19 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                    <compilerArgs>--enable-preview</compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 
 </project>

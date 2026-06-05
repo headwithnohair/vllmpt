@@ -1,6 +1,7 @@
 package org.albedo.vllmpt.chat.controller;
 
 
+import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.ai.service.MemoryChatAssistant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -9,6 +10,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/chat/memory")
+@Slf4j
 public class MemoryChatController {
 
     @Autowired
@@ -21,7 +23,7 @@ public class MemoryChatController {
     public Map<String, String> chat(@RequestBody Map<String, String> request) {
         String chatId = request.get("chatId");  // 会话 ID
         String message = request.get("message");
-
+        log.info(message);
         String response = memoryChatAssistant.chat(chatId, message);
         return Map.of("response", response, "chatId", chatId);
     }
