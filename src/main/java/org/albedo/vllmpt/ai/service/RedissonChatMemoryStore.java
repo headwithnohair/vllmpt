@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.ai.config;
+package org.albedo.vllmpt.ai.service;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;

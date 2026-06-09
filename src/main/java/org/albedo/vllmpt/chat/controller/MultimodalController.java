@@ -21,7 +21,7 @@ public class MultimodalController {
      */
     @PostMapping("/single-image")
     public Map<String, String> chatWithImage(@RequestBody MultimodalChatRequest request) {
-        String response = multimodalAssistant.chatWithImage(request.getText(), request.getImageUrl());
+        String response = multimodalAssistant.chatWithImage(request.getChatId(),request.getText(), request.getImageUrl());
         return Map.of("response", response);
     }
 
@@ -30,7 +30,7 @@ public class MultimodalController {
      */
     @PostMapping("/multiple-images")
     public Map<String, String> chatWithMultipleImages(@RequestBody MultimodalChatRequest request) {
-        String response = multimodalAssistant.chatWithMultipleImages(request.getText(), request.getImageUrls());
+        String response = multimodalAssistant.chatWithMultipleImages(request.getChatId(),request.getText(), request.getImageUrls());
         return Map.of("response", response);
     }
 }

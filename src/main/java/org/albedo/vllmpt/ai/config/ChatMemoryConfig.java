@@ -2,6 +2,7 @@ package org.albedo.vllmpt.ai.config;
 
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import org.albedo.vllmpt.ai.service.RedissonChatMemoryStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
