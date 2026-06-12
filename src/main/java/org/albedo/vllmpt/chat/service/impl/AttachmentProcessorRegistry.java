@@ -1,23 +1,28 @@
 package org.albedo.vllmpt.chat.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.chat.service.AttachmentProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+@Slf4j
 @Service
 public class AttachmentProcessorRegistry {
     private final Map<String, AttachmentProcessor> processorMap = new HashMap<>();
-
+    private final List<String> supportSet =  List.of("image", "txt");
     @Autowired
     public void registerProcessors(List<AttachmentProcessor> processors) {
+
         for (AttachmentProcessor p : processors) {
-            // 这里简单模拟 type -> processor，也可以让每个 processor 自己声明支持的 type
-            // 更优雅：使用注解或策略模式自行注册
+            if (p.supports(supportSet.getFirst()))
+            {
+                processorMap.put(supportSet.getFirst(), p);
+            }
+
         }
+
     }
 
     public AttachmentProcessor getProcessor(String type) {

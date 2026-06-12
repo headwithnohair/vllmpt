@@ -2,12 +2,16 @@ package org.albedo.vllmpt.ai.strategy;
 
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
+import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.chat.model.entity.Attachment;
 import org.albedo.vllmpt.chat.model.entity.ProcessResult;
 import org.albedo.vllmpt.chat.service.AttachmentProcessor;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@Slf4j
+@Component
 public class ImageProcessor implements AttachmentProcessor {
     @Override
     public boolean supports(String type) {

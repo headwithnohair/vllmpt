@@ -27,9 +27,6 @@ public class MultimodalAssistant {
     private ChatLanguageModel chatModel;
 
     @Autowired
-    private ChatMemoryProvider chatMemoryProvider;
-
-    @Autowired
     private AttachmentProcessorRegistry processorRegistry;
 
     @Autowired
@@ -38,32 +35,6 @@ public class MultimodalAssistant {
     /**
      * 处理多张图片 + 文本
      */
-    public String chatWithMultipleImages(String sessionId,String text, List<String> attachments) {
-        log.info("处理多模态请求 - 文本: {}, 图片: {}", text, attachments);
-        TextContent textContent = TextContent.from(text);
-
-        ChatMemory chatMemory=chatMemoryProvider.get(sessionId);
-        // 直接使用原始 URL 列表（不转存到 MinIO）
-        List<ImageContent> imageContentList = attachments.stream()
-                .map(ImageContent::from)
-                .toList();
-
-        // 将所有Content（文本+图片）组合成一个列表
-        List<Content> contents = new ArrayList<>();
-        contents.add(textContent);
-        contents.addAll(imageContentList);
-
-        // 用内容列表创建UserMessage
-        UserMessage userMessage = UserMessage.from(contents);
-        chatMemory.add(userMessage);
-
-        List<ChatMessage> allMessages = chatMemory.messages();
-        // 发送消息并获取回复
-        String response =chatModel.generate(allMessages).content().text();
-        chatMemory.add(AiMessage.from(response));
-        log.info("多模态响应完成");
-        return response;
-    }
 
     public String chatWithMultipleFiles(String sessionId,String text, List<Attachment> attachments) {
         ChatMemory memory = memoryProvider.get(sessionId);
@@ -97,7 +68,7 @@ public class MultimodalAssistant {
             finalContents.addAll(allContents);
             userMessage = UserMessage.from(finalContents);
         }
-
+        log.info(userMessage.toString());
         // 4. 调用模型
         AiMessage aiMessage = chatModel.generate(userMessage).content();
 

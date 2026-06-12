@@ -1,13 +1,14 @@
 package org.albedo.vllmpt.ai.strategy;
 
 import dev.langchain4j.data.message.TextContent;
-import dev.langchain4j.data.segment.TextSegment;
+import org.albedo.vllmpt.ai.extractor.DocumentExtractor;
 import org.albedo.vllmpt.chat.model.entity.Attachment;
 import org.albedo.vllmpt.chat.model.entity.ProcessResult;
 import org.albedo.vllmpt.chat.service.AttachmentProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
@@ -27,7 +28,12 @@ public class DocumentProcessor implements AttachmentProcessor {
 
     @Override
     public ProcessResult process(Attachment attachment, String sessionId) {
-        String fullText = extractor.extractText(attachment.getUrl()); // 下载并解析
+        String fullText = null; // 下载并解析
+        try {
+            fullText = extractor.extractText(attachment.getUrl());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         int len = fullText.length();
 
         if (len <= SHORT_TEXT_THRESHOLD) {

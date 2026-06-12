@@ -17,12 +17,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class MultimodalEnhancedController {
-
-    private final MultimodalAssistant multimodalAssistant;
     private final FileUploadService fileUploadService;
 
     /**
-     * 上传图片并对话（一步完成）
+     * 上传图片
      * 
      * @param file 图片文件
      * @param text 对话文本
@@ -53,11 +51,11 @@ public class MultimodalEnhancedController {
             log.info("图片上传成功: {}", minioUrl);
             
             // 2. 使用 MinIO URL 进行多模态对话
-            String response = multimodalAssistant.chatWithImage(sessionId,text, minioUrl);
+//            String response = multimodalAssistant.chatWithImage(sessionId,text, minioUrl);
             
             // 3. 返回结果
             return Map.of(
-                "response", response,
+                "response", "",
                 "imageUrl", minioUrl
             );
         } catch (Exception e) {

@@ -23,12 +23,5 @@ public class MultimodalController {
         return Map.of("response", response);
     }
 
-    //    /**
-//     * 多图对话
-//     */
-//    @PostMapping("/multiple-images")
-//    public Map<String, String> chatWithMultipleImages(@RequestBody MultimodalChatRequest request) {
-//        String response = multimodalAssistant.chatWithMultipleImages(request.getChatId(),request.getText(), request.getAttachments());
-//        return Map.of("response", response);
-//    }
+
 }

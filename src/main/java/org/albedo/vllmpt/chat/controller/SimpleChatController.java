@@ -1,6 +1,5 @@
 package org.albedo.vllmpt.chat.controller;
 
-import org.albedo.vllmpt.ai.service.SimpleChatAssistant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,21 +14,11 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/chat/simple")
 public class SimpleChatController {
-    @Autowired
-    private SimpleChatAssistant chatAssistant;
 
     @Autowired
     private RedisTemplate<String,Object> redisTemplate;
 
-    /**
-     * 简单对话接口
-     */
-    @PostMapping
-    public Map<String, String> chat(@RequestBody Map<String, String> request) {
-        String userMessage = request.get("message");
-        String response = chatAssistant.chat(userMessage);
-        return Map.of("response", response);
-    }
+
     @PostMapping("/test")
     public String test(){
         // 注意：这里使用你实际查到的完整 key
