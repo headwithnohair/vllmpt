@@ -56,7 +56,7 @@ public class MultimodalAssistant {
         // 2. 加载历史记忆（纯文本）
         List<ChatMessage> history = memory.messages();
         String historyText = buildHistoryText(history);
-        String finalUserText = historyText + "用户: " + memoryTextBuilder.toString();
+        String finalUserText = historyText + "用户: " + memoryTextBuilder;
 
         // 3. 构造发送给模型的 UserMessage
         UserMessage userMessage;
