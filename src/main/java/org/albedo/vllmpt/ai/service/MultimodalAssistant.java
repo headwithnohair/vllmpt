@@ -3,7 +3,7 @@ package org.albedo.vllmpt.ai.service;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.chat.model.entity.Attachment;
 import org.albedo.vllmpt.chat.model.entity.ProcessResult;
@@ -24,7 +24,7 @@ import java.util.List;
 public class MultimodalAssistant {
 
     @Autowired
-    private ChatLanguageModel chatModel;
+    private ChatModel chatModel;
 
     @Autowired
     private AttachmentProcessorRegistry processorRegistry;
@@ -70,7 +70,7 @@ public class MultimodalAssistant {
         }
         log.info(userMessage.toString());
         // 4. 调用模型
-        AiMessage aiMessage = chatModel.generate(userMessage).content();
+        AiMessage aiMessage = chatModel.chat(userMessage).aiMessage();
 
         // 5. 存储记忆（只存纯文本）
         memory.add(UserMessage.from(memoryTextBuilder.toString()));

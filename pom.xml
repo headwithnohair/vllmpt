@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>4.0.6</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>org.albedo</groupId>
@@ -38,7 +38,26 @@
         <rabbitMQ.version>5.30.0</rabbitMQ.version>
         <elasticsearch.version>9.4.1</elasticsearch.version>
         <minio.version>8.5.7</minio.version>
+        <langchain4j.version>1.16.2</langchain4j.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-bom</artifactId>
+                <version>${mybatis-plus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>${langchain4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>com.rabbitmq</groupId>
@@ -50,17 +69,12 @@
         <!-- Spring Boot Starter（核心，包含自动配置） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-spring-boot-starter</artifactId>
-            <version>0.35.0</version>
+            <artifactId>langchain4j-spring-boot4-starter</artifactId>
         </dependency>
-
-
-
         <!-- OpenAI 兼容模型支持（硅基流动使用 OpenAI 格式） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>0.35.0</version>
+            <artifactId>langchain4j-open-ai-spring-boot4-starter</artifactId>
         </dependency>
 
         <!-- OkHttp - LangChain4j OpenAI 模块所需 -->
@@ -106,12 +120,15 @@
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-bom</artifactId>
-            <version>${mybatis-plus.version}</version>
-            <type>pom</type>
-            <scope>import</scope>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>9.7.0</version>
+            <scope>compile</scope>
+        </dependency>
         <!-- ========== 工具类库 ========== -->
         <!-- Lombok -->
         <dependency>
