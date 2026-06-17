@@ -2,3 +2,6 @@
 2.图片向量化
 3. funtion calling ReAct模式
 4.后期考虑 workFlow
+
+5.智能路由 (Router) +规范 输出格式 匹配到 计划提示词 (Visual Query Rewriting) 提升颗粒度
+

@@ -20,9 +20,7 @@ public class AttachmentProcessorRegistry {
             {
                 processorMap.put(supportSet.getFirst(), p);
             }
-
         }
-
     }
 
     public AttachmentProcessor getProcessor(String type) {
