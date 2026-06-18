@@ -2,7 +2,6 @@ package org.albedo.vllmpt.chat.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.albedo.vllmpt.ai.service.MultimodalAssistant;
 import org.albedo.vllmpt.file.service.FileUploadService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;

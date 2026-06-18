@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.ai.model;
+package org.albedo.vllmpt.ai.service;
 
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;

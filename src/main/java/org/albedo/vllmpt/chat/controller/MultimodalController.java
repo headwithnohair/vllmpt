@@ -1,7 +1,7 @@
 package org.albedo.vllmpt.chat.controller;
 
 
-import org.albedo.vllmpt.ai.service.MultimodalAssistant;
+import org.albedo.vllmpt.chat.service.MultimodalAssistant;
 import org.albedo.vllmpt.chat.model.dto.MultimodalChatRequest;
 import org.albedo.vllmpt.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +24,7 @@ public class MultimodalController {
         {
             throw  new BusinessException("Attachments required");
         }
-        String response = multimodalAssistant.chatWithMultipleFiles(request.getChatId(),request.getText(), request.getAttachments());
+        String response = multimodalAssistant.chatWithMultipleFiles(request);
         return Map.of("response", response);
     }
 
