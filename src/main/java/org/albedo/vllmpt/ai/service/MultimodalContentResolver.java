@@ -2,6 +2,7 @@ package org.albedo.vllmpt.ai.service;
 
 
 import dev.langchain4j.data.message.Content;
+import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.chat.model.entity.Attachment;
 import org.albedo.vllmpt.chat.model.entity.ProcessResult;
 import org.albedo.vllmpt.chat.service.AttachmentProcessor;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Component
 public class MultimodalContentResolver {
 
@@ -30,6 +32,8 @@ public class MultimodalContentResolver {
             AttachmentProcessor processor = processorRegistry.getProcessor(att.getType());
             ProcessResult result = processor.process(att, sessionId);
 
+            log.info("result.getContentsForModel():{}",result.getContentsForModel());
+            log.info("result.getMemoryText():{}",result.getMemoryText());
             allContents.addAll(result.getContentsForModel());
             if (result.getMemoryText() != null) {
                 memoryTextBuilder.append(" ").append(result.getMemoryText());

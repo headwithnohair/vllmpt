@@ -16,7 +16,7 @@ public class ChatMemoryConfig {
     public ChatMemoryProvider chatMemoryProvider(RedissonChatMemoryStore redissonChatMemoryStore) {
         return memoryId -> MessageWindowChatMemory.builder()
                 .id(memoryId)
-                .maxMessages(5) // 保留最近 5 条原始对话，超出的会自动让大模型总结成摘要
+                .maxMessages(10) // 保留最近 10 条原始对话，超出的让大模型总结前5条 成摘要 (总结后为6条)
                 .chatMemoryStore(redissonChatMemoryStore) // 绑定 Redis 持久化
                 .build();
     }

@@ -22,6 +22,7 @@ public class ImageProcessor implements AttachmentProcessor {
     public ProcessResult process(Attachment attachment, String sessionId) {
         // 直接使用 URL 作为 ImageContent
         List<Content> contents = List.of(ImageContent.from(attachment.getUrl()));
+        //后续考虑面向非多模态模型时,添加图片的语义描述,.
         // 记忆只存标记，不存 URL
         String memoryText = "[图片: " + attachment.getName() + "]";
         return new ProcessResult(contents, memoryText, false, null);
