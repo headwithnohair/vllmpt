@@ -4,6 +4,7 @@ import dev.langchain4j.data.message.*;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.TokenStream;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.ai.service.ChatModelFactory;
@@ -74,8 +75,37 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     }
 
     @Override
-    public TokenStream chatStream(MultimodalChatRequest request) {
-        return null;
+    public DefaultChatStream chatWithMultipleFilesStreaming(MultimodalChatRequest request) {
+        String sessionId = request.getSessionId();
+
+        // 1. 获取记忆
+        ChatMemory memory = memoryProvider.get(sessionId);
+
+        // 2. 解析附件
+        MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(
+                sessionId, request.getText(), request.getAttachments());
+
+        // 3. 构建当前用户消息 (多模态)
+        List<Content> currentContents = new ArrayList<>();
+        currentContents.add(TextContent.from(resolveResult.memoryText));
+        currentContents.addAll(resolveResult.contentsForModel);
+        UserMessage currentUserMsg = UserMessage.from(currentContents);
+
+        // 4. 合并历史消息
+        List<ChatMessage> allMessages = new ArrayList<>(memory.messages());
+        allMessages.add(currentUserMsg);
+
+        // 5. 创建流式模型
+        StreamingChatModel streamingModel = chatModelFactory.createStreamingModel(
+                request.getModelName(), request.getTemperature(), request.getMaxTokens());
+
+        // 6. 返回封装好的 Stream 对象 (将复杂的回调逻辑交给 DefaultChatStream 处理)
+        return new DefaultChatStream(
+                streamingModel,
+                allMessages,
+                memory,
+                resolveResult.memoryText
+        );
     }
 
 }

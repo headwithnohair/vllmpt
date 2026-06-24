@@ -5,7 +5,9 @@ import org.albedo.vllmpt.chat.service.MultimodalAssistant;
 import org.albedo.vllmpt.chat.model.dto.MultimodalChatRequest;
 import org.albedo.vllmpt.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.Map;
 
@@ -26,6 +28,21 @@ public class MultimodalController {
         }
         String response = multimodalAssistant.chatWithMultipleFiles(request);
         return Map.of("response", response);
+    }
+
+    @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> streamChatWithFiles(@RequestBody MultimodalChatRequest request) {
+
+        return Flux.create(sink -> {
+            multimodalAssistant.chatWithMultipleFilesStreaming(request)
+                    .onNext(sink::next) // 直接推入 Flux
+                    .onComplete(response -> {
+                        sink.next("[DONE]");
+                        sink.complete();
+                    })
+                    .onError(sink::error)
+                    .start();
+        });
     }
 
 
