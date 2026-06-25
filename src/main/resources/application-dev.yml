@@ -87,6 +87,9 @@ langchain4j:
       max-tokens: 8192
       # 顶部采样
       top-p: 0.9
+    embedding-model:
+      model-name: BAAI/bge-m3
+      dimension: 8192
 
 # 日志配置 - 开发环境详细日志
 logging:
