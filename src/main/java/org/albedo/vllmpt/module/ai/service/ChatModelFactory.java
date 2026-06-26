@@ -20,7 +20,7 @@ public class ChatModelFactory {
     private String apiKey;
     private final Map<String, ChatModel> modelCache = new ConcurrentHashMap<>();
     private final Map<String, StreamingChatModel> streamModelCache = new ConcurrentHashMap<>();
-    private final Map<String, EmbeddingModel> embeddingModelCache = new ConcurrentHashMap<>();
+
 
     public ChatModel createModel(String modelName, Double temperature, Integer maxTokens) {
         // 将 temperature 限制为 0.1 的倍数 (0.0, 0.1, 0.2 ... 1.0)

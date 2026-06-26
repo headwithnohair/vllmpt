@@ -14,16 +14,29 @@ public class VectorStoreConfig {
     @Value("${app.vector-store.base-url}")
     private String baseUrl;
 
-    @Value("${app.vector-store.collection-name}")
-    private String collectionName;
+    @Value("${app.vector-store.knowledge-base-collection}")
+    private String knowledgeBaseCollection;
 
-    @Bean
-    public EmbeddingStore<TextSegment> embeddingStore() {
+    @Value("${app.vector-store.user-profile-collection}")
+    private String userProfileCollection;
+
+    @Bean("knowledgeBaseEmbeddingStore")
+    public EmbeddingStore<TextSegment> knowledgeBaseEmbeddingStore() {
         return ChromaEmbeddingStore.builder()
                 .apiVersion(ChromaApiVersion.V2)
                 .baseUrl(baseUrl)
-                .collectionName(collectionName)
-                // 生产环境建议关闭日志，或者使用 SLF4J 桥接
+                .collectionName(knowledgeBaseCollection)
+                .logRequests(false)
+                .logResponses(false)
+                .build();
+    }
+
+    @Bean("userProfileEmbeddingStore")
+    public EmbeddingStore<TextSegment> userProfileEmbeddingStore() {
+        return ChromaEmbeddingStore.builder()
+                .apiVersion(ChromaApiVersion.V2)
+                .baseUrl(baseUrl)
+                .collectionName(userProfileCollection)
                 .logRequests(false)
                 .logResponses(false)
                 .build();

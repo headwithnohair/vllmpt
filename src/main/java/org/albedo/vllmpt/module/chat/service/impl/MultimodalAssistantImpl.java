@@ -37,6 +37,8 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     @Autowired
     private MultimodalContentResolver contentResolver;
 
+    @Autowired
+    private  UserProfileRagService userProfileRagService;
     /**
      * 处理多张图片 + 文本
      */

@@ -90,6 +90,8 @@ langchain4j:
     embedding-model:
       model-name: BAAI/bge-m3
       dimension: 8192
+    reranker-model:
+      model-name: BAAI/bge-reranker-v2-m3
 
 # 日志配置 - 开发环境详细日志
 logging:
@@ -122,4 +124,11 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+# 向量数据库配置 (Chroma)
+app:
+  vector-store:
+    base-url: http://localhost:8000
+    knowledge-base-collection: vllmpt_knowledge_base
+    user-profile-collection: vllmpt_user_profiles
+
 # Spring Security 配置 - 开发环境关闭安全验证
