@@ -92,6 +92,11 @@
         </dependency>
 
         <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-cohere</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>${elasticsearch.version}</version>
@@ -227,10 +232,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version> <!-- 务必指定高版本 -->
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                    <compilerArgs>--enable-preview</compilerArgs>
+                    <release>21</release>  <!-- 自动处理 -source 和 -target，且锁定 JDK API -->
+                    <enablePreview>true</enablePreview> <!-- 等价于 -enable-preview，写法更规范 -->
                 </configuration>
             </plugin>
         </plugins>

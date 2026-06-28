@@ -1,5 +1,27 @@
 
 services:
+  # ========== MySQL ==========
+  mysql:
+    image: mysql:8.0
+    container_name: vllmpt-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123          # 与 spring.datasource.password 一致
+      MYSQL_DATABASE: vllmpt_dev            # 自动创建数据库，与 URL 中的库名一致
+      MYSQL_ROOT_HOST: '%'                  # 允许所有 IP 连接（便于宿主机访问）
+    ports:
+      - "3306:3306"                         # 映射到宿主机 3306，供宿主机上的 Spring 应用连接
+    volumes:
+      - mysql_data:/var/lib/mysql           # 持久化数据
+      - ./mysql/conf:/etc/mysql/conf.d      # 可选：自定义配置目录（如字符集）
+    networks:
+      - vllmpt-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$MYSQL_ROOT_PASSWORD" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
   # ========== Redis ==========
   redis:
     image: redis:7-alpine
@@ -152,6 +174,8 @@ services:
 
 # ========== 数据卷 ==========
 volumes:
+  mysql_data:
+    driver: local
   redis_data:
     driver: local
   rabbitmq_data:
