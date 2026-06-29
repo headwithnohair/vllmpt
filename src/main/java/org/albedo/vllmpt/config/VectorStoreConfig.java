@@ -31,6 +31,8 @@ public class VectorStoreConfig {
                 .build();
     }
 
+    //如果你必须要在底层剔除文本传输，你需要绕过 LangChain4j 的 EmbeddingStore 接口，直接使用 Chroma 的 Java Client 进行查询
+    //以后再考虑
     @Bean("userProfileEmbeddingStore")
     public EmbeddingStore<TextSegment> userProfileEmbeddingStore() {
         return ChromaEmbeddingStore.builder()

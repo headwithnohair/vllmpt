@@ -5,7 +5,7 @@ import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.service.TokenStream;
+
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.module.ai.service.ChatModelFactory;
 import org.albedo.vllmpt.module.ai.service.EmbeddingModelFactory;
@@ -37,8 +37,12 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     @Autowired
     private MultimodalContentResolver contentResolver;
 
+
     @Autowired
     private  UserProfileRagService userProfileRagService;
+
+    @Autowired
+    private  KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
     /**
      * 处理多张图片 + 文本
      */
@@ -57,6 +61,10 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         currentContents.addAll(resolveResult.contentsForModel);
         log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
         UserMessage currentUserMsg = UserMessage.from(currentContents);
+
+        // 使用 预设知识库 进行搜索
+        List<dev.langchain4j.rag.content.Content> list= knowledgeBaseRagService.searchRelevantTexts(request.getText(),5,0.7);
+
 
         // 3. 合并历史消息（历史 + 当前）
         List<ChatMessage> allMessages = new ArrayList<>(memory.messages());

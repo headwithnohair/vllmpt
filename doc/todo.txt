@@ -10,6 +10,14 @@
 8.摘要
 
 
+以后:
+    //Chroma 返回 id+评分 重构;如果你必须要在底层剔除文本传输，
+    你需要绕过 LangChain4j 的 EmbeddingStore 接口，
+    直接使用 Chroma 的 Java Client 进行查询
+ 先查询只返回 ID + score（如果底层支持）。
+ 拿到 Top‑5 的 ID 后，再从数据库或缓存中按需加载对应的文本——这样能最大程度节约内存。
+
+
 
 
 补充:

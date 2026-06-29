@@ -4,6 +4,9 @@ import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.output.Response;
+import dev.langchain4j.rag.content.Content;
+import dev.langchain4j.rag.content.aggregator.ContentAggregator;
+import dev.langchain4j.rag.query.Query;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
@@ -13,7 +16,11 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class KnowledgeBaseRagServiceImpl   {
@@ -27,6 +34,10 @@ public class KnowledgeBaseRagServiceImpl   {
 
     @Autowired
     private EmbeddingModelFactory embeddingModelFactory;
+
+
+    @Autowired
+    private ContentAggregator contentAggregator ;
 
     private final EmbeddingStore<TextSegment> knowledgeBaseEmbeddingStore;
 
@@ -46,7 +57,7 @@ public class KnowledgeBaseRagServiceImpl   {
         knowledgeBaseEmbeddingStore.add(embedding, TextSegment.from(text));
     }
 
-    public List<String> searchRelevantTexts(String query, int maxResults,Double minScore) {
+    public List<Content> searchRelevantTexts(String query, int maxResults,Double minScore) {
         EmbeddingModel model = embeddingModelFactory.createModel(modelName, dimension);
         Embedding queryEmbedding= model.embed(query).content();
         EmbeddingSearchRequest embeddingSearchRequest = EmbeddingSearchRequest.builder()
@@ -56,10 +67,16 @@ public class KnowledgeBaseRagServiceImpl   {
                 .build();
 
         List<EmbeddingMatch<TextSegment>> matches = knowledgeBaseEmbeddingStore.search(embeddingSearchRequest).matches();
-        List<String> results = matches.stream().map(item->item.embedded().text()).toList();
-        EmbeddingMatch<TextSegment> embeddingMatch = matches.getFirst();
-        System.out.println(embeddingMatch.score()); // 0.8144288493114709
-        System.out.println(embeddingMatch.embedded().text());
-        return  results;
+        List<Content> contents = matches.stream()
+                .map(match -> Content.from(match.embedded())) // TextSegment 可以直接转换
+                .toList();
+
+        Query text = Query.from(query);
+        Map<Query, Collection<List<Content>>> queryToContents = new HashMap<>();
+        // 将你的 contents 列表放入一个 Collection 中
+
+        queryToContents.put(text, List.of(contents));
+
+        return contentAggregator.aggregate(queryToContents);
     }
 }
