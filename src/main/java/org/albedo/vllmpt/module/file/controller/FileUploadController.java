@@ -22,9 +22,9 @@ public class FileUploadController {
     private  final MinioService minioService;
 
     @PostMapping("/upload/UploadUrl")
-    public Result<String> getMinioUploadUrl(@RequestBody Map<String, Object> jsonMap){
+    public Result< Map<String, String>> getMinioUploadUrl(@RequestBody Map<String, Object> jsonMap){
         String fileName =jsonMap.get("fileName").toString();
-        String op= minioService.getUploadUrl(fileName);
+        Map<String, String> op= minioService.getUploadUrl(fileName);
         return Result.success(op);
     }
 
