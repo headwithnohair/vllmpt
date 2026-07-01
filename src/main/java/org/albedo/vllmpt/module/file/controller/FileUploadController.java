@@ -2,7 +2,9 @@ package org.albedo.vllmpt.module.file.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.module.file.service.FileUploadService;
+import org.albedo.vllmpt.module.file.service.MinioService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,6 +20,17 @@ import java.util.Map;
 public class FileUploadController {
 
     private final FileUploadService fileUploadService;
+
+    private  final MinioService minioService;
+
+    @PostMapping("/upload/UploadUrl")
+    public Result<String> getMinioUploadUrl(@RequestBody Map<String, Object> jsonMap){
+        String fileName =jsonMap.get("fileName").toString();
+        String op= minioService.getUploadUrl(fileName);
+        return Result.success(op);
+    }
+
+
 
     /**
      * 上传图片（multipart/form-data）
@@ -36,6 +49,7 @@ public class FileUploadController {
         }
 
         // 验证文件大小（最大 10MB）
+
         if (file.getSize() > 10 * 1024 * 1024) {
             throw new IllegalArgumentException("图片大小不能超过 10MB");
         }

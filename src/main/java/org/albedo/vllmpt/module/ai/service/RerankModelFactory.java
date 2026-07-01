@@ -25,7 +25,7 @@ public class RerankModelFactory {
     public ScoringModel createModel(String modelName) {
 
 
-        String cacheKey = String.format("%s:%.1f:%d", modelName);
+        String cacheKey = String.format("%s", modelName);
 
         return modelCache.computeIfAbsent(cacheKey, k ->  CohereScoringModel.builder()
                 .apiKey(apiKey)
