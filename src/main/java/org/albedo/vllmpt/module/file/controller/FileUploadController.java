@@ -7,7 +7,6 @@ import org.albedo.vllmpt.module.file.service.FileUploadService;
 import org.albedo.vllmpt.module.file.service.MinioService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.util.Map;
 
 /**
@@ -20,7 +19,6 @@ import java.util.Map;
 public class FileUploadController {
 
     private final FileUploadService fileUploadService;
-
     private  final MinioService minioService;
 
     @PostMapping("/upload/UploadUrl")
