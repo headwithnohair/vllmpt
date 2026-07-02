@@ -4,12 +4,19 @@ package org.albedo.vllmpt.module.file.service;
 import cn.hutool.core.lang.UUID;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
+import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
+import io.minio.errors.*;
 import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.exception.BusinessException;
+import org.albedo.vllmpt.module.file.entity.dto.FileUploadDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,4 +56,31 @@ public class MinioService {
         return  result;
     }
 
+
+
+    public Boolean  FileExistCheck(FileUploadDTO fileUploadDTO, String targetBucket) {
+
+        try {
+            StatObjectResponse pp= minioClient.statObject(StatObjectArgs.builder()
+                            .object(fileUploadDTO.getObjectName())
+                            .bucket(targetBucket)
+                            .build());
+//        log.info(pp.);
+
+        }catch (ErrorResponseException  e){
+            if ("NoSuchKey".equals(e.errorResponse().code())) {
+                log.info("NoSuchKey");
+                return false;
+            }
+            // 其他错误（如权限、桶不存在等）视为严重问题，转为运行时异常
+            throw new RuntimeException("MinIO statObject failed", e);
+        } catch (Exception e) {
+            // 其他异常（网络、证书等）也转为运行时异常
+            throw new RuntimeException("MinIO statObject failed", e);
+        }
+
+
+
+        return  false;
+    }
 }
