@@ -24,18 +24,17 @@ public class EmbeddingTextController {
      @PostMapping("/file")
     public void indexFile(@RequestBody FileUploadDTO fileUploadDTO){
 
-         log.info(String.valueOf(fileUploadDTO));
         // 确认前端确实 传递了文件,
         minioService.FileExistCheck(fileUploadDTO,"vllmpt-temp");
 
         // 将文件移出temp桶,放入datat桶
+         minioService.FileChangeBucket(fileUploadDTO,"vllmpt-temp","vllmpt-data");
 
+         // 获取数据
 
-        //
-        // 进行文件解析, 向量化
+         //拆分
 
-
-        //
+         // 返还拆分结果,
 
         return;
     }
