@@ -21,8 +21,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -38,6 +39,8 @@ import static org.apache.commons.compress.utils.FileNameUtils.getExtension;
 @Service
 @Slf4j
 public class MinioService {
+    private static final Semaphore processingLimiter = new Semaphore(4);
+    private static final File TEMP_BASE_DIR = new File("/data/app_temp/");
 
     @Autowired
     private MinioClient minioClient;
@@ -70,20 +73,17 @@ public class MinioService {
         return  result;
     }
 
-
-
-
-
     public Boolean  FileExistCheck(FileUploadDTO fileUploadDTO, String targetBucket) {
 
         try {
-            StatObjectResponse pp= minioClient.statObject(StatObjectArgs.builder()
+            StatObjectResponse stat= minioClient.statObject(StatObjectArgs.builder()
                             .object(fileUploadDTO.getObjectName())
                             .bucket(targetBucket)
                             .build());
-//        log.info(pp.);
 
-            return  pp.etag().equals(fileUploadDTO.getEtag());
+        log.info("========{}", stat.contentType());
+
+            return  stat.etag().equals(fileUploadDTO.getEtag());
         }catch (ErrorResponseException  e){
             if ("NoSuchKey".equals(e.errorResponse().code())) {
                 log.info("NoSuchKey");
@@ -104,7 +104,7 @@ public class MinioService {
     public void  FileChangeBucket(FileUploadDTO fileUploadDTO,String  source,String target){
             try{
                 String fileType = resolveFileType(fileUploadDTO.getMimeType());
-                String finalObjectName = fileType+"/" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "/" + fileUploadDTO.getObjectName();
+                String finalObjectName = "fileType"+"/" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "/" + fileUploadDTO.getObjectName();
 
                 minioClient.copyObject(CopyObjectArgs.builder()
                                 .bucket(target)
@@ -131,34 +131,85 @@ public class MinioService {
         return;
     }
 
+    public  boolean processFileFromMinIO(FileUploadDTO fileUploadDTO,String  source){
 
-    public Document loadPdfFromMinIO(FileUploadDTO fileUploadDTO, String bucketName){
-        try {
 
-            InputStream minioStream = minioClient.getObject(
+       try{
+           StatObjectResponse stat = minioClient.statObject(
+                   StatObjectArgs.builder()
+                           .bucket(source)
+                           .object(fileUploadDTO.getObjectName())
+                           .build());
+           //确认文件大小,后缀.,准备存放
+           InputStream minioStream = minioClient.getObject(
                     GetObjectArgs.builder()
-                            .bucket(bucketName)
+                            .bucket(source)
                             .object(fileUploadDTO.getObjectName())
-                            .build()
-            );
+                            .build());
 
+           long fileSize = stat.size();
+           String contentType = stat.contentType();
+           if (TEMP_BASE_DIR.getFreeSpace() < 2L * 1024 * 1024 * 1024) { // 小于 2GB
+               throw new RuntimeException("磁盘空间不足，拒绝处理");
+           }
 
-            ApachePdfBoxDocumentParser parser = new ApachePdfBoxDocumentParser();
-            // 解析流，返回 Document 对象
-            Document document = parser.parse(minioStream);
+           processingLimiter.acquire();
+           log.info("file size {}",fileSize);
+           log.info("file contentType {}",contentType);
+           // 5. 分级处理逻辑
+//           if (isTextFile(contentType) && fileSize < 2 * 1024 * 1024) {
+//               // 【TXT/小文本】：纯内存处理，不落盘
+//               processInMemory(bucketName, objectName);
+//           } else {
+//               // 【图片/PDF】：下载到本地 SSD 临时目录
+//               processWithLocalTempFile(bucketName, objectName, contentType);
+//           }
 
-            //  可以添加元数据，如文件名、来源等
-            document.metadata().put("source_file_name", fileUploadDTO.getObjectName());
-            document.metadata().put("bucket", bucketName);
+           processingLimiter.release();
 
-            return document;
-        } catch (Exception e) {
-            // 处理异常
-            throw new RuntimeException("Failed to load PDF from MinIO", e);
-        }
+       }catch (Exception e){
+           log.warn("minioStream Error",e);
+       }
 
-
+        return  true;
     }
+
+//    private void processWithLocalTempFile(String bucket, String objectName, String contentType) {
+//        // 创建按日期和类型分类的临时文件
+//        String dateDir = LocalDate.now().toString();
+//        String typeDir = getFileTypeDir(contentType); // 返回 "pdf" 或 "image"
+//        File dir = new File(TEMP_BASE_DIR, dateDir + "/" + typeDir);
+//        dir.mkdirs();
+//
+//        File tempFile = new File(dir, UUID.randomUUID() + "_" + objectName);
+//
+//        try {
+//            // 7. 流式下载到本地磁盘（边读边写，不占满内存）
+//            try (InputStream in = minioClient.getObject(
+//                    GetObjectArgs.builder()
+//                            .object(objectName)
+//                            .bucket(bucket)
+//                            .build());
+//                 OutputStream out = new FileOutputStream(tempFile)) {
+//                byte[] buffer = new byte[8192];
+//                int len;
+//                while ((len = in.read(buffer)) != -1) {
+//                    out.write(buffer, 0, len);
+//                }
+//            }
+//
+//            // 8. 执行具体的解析和向量化（OCR / PDF解析）
+//            vectorizeFile(tempFile, contentType);
+//
+//        } catch (Exception e) {
+//            log.error("处理文件失败: {}", objectName, e);
+//        } finally {
+//            // 9. 核心：无论成功失败，必须删除临时文件
+//            if (tempFile.exists() && !tempFile.delete()) {
+//                log.warn("临时文件删除失败，等待兜底任务清理: {}", tempFile.getAbsolutePath());
+//            }
+//        }
+//    }
     /**
      * 根据 MimeType 判断文件类型
      */
@@ -187,78 +238,5 @@ public class MinioService {
         return "unknown";
     }
 
-    /**
-     * 按页解析 PDF，带页面间重叠，避免语义在分页处被截断。
-     * 解析后的文本块直接存入向量数据库。
-     *
-     * @param minioStream PDF 文件输入流
-     * @param objectName  文件名，用于标记来源
-     * @return 切分后的文本块数量
-     */
-    public int parseWithPageOverlap(InputStream minioStream, String objectName) {
-        List<TextSegment> allSegments = new java.util.ArrayList<>();
-        try (PDDocument document = Loader.loadPDF(minioStream.readAllBytes())) {
 
-            PDFTextStripper stripper = new PDFTextStripper();
-            int totalPages = document.getNumberOfPages();
-            log.info("开始解析 PDF [{}]，共 {} 页", objectName, totalPages);
-
-            String previousPageSuffix = "";
-            int OVERLAP_SIZE = 200;
-
-            for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
-                stripper.setStartPage(pageNum);
-                stripper.setEndPage(pageNum);
-                String currentPageText = stripper.getText(document);
-                if (currentPageText.isBlank()) {
-                    previousPageSuffix = "";
-                    continue;
-                }
-
-                // 把上一页末尾拼到当前页开头，保证跨页语义不丢失
-                String enrichedText = previousPageSuffix + currentPageText;
-
-                Document tempDoc = Document.from(enrichedText);
-                tempDoc.metadata().put("source_file", objectName);
-                tempDoc.metadata().put("page_num", String.valueOf(pageNum));
-                tempDoc.metadata().put("total_pages", String.valueOf(totalPages));
-
-                DocumentSplitter splitter = DocumentSplitters.recursive(300, 30);
-                List<TextSegment> segments = splitter.split(tempDoc);
-
-                // 给每个分块打上 metadata
-                for (TextSegment segment : segments) {
-                    segment.metadata().put("source_file", objectName);
-                    segment.metadata().put("page_num", String.valueOf(pageNum));
-                }
-                allSegments.addAll(segments);
-
-                // 缓存当前页尾部，供下一页 overlap
-                int len = currentPageText.length();
-                previousPageSuffix = len > OVERLAP_SIZE
-                        ? currentPageText.substring(len - OVERLAP_SIZE) : currentPageText;
-            }
-
-            log.info("PDF [{}] 解析完成，共生成 {} 个文本块", objectName, allSegments.size());
-
-        } catch (IOException e) {
-            log.error("PDF 解析失败 [{}]", objectName, e);
-            throw new BusinessException(500, "PDF 解析失败: " + e.getMessage());
-        }
-
-        // 存入向量数据库
-        if (!allSegments.isEmpty()) {
-            saveSegments(allSegments);
-        }
-        return allSegments.size();
-    }
-
-    /**
-     * 将文本块列表存入向量数据库（需注入 EmbeddingStore 和 EmbeddingModelFactory）
-     */
-    private void saveSegments(List<TextSegment> segments) {
-        // 由调用方通过构造注入，避免 MinioService 与 AI 模块耦合过深
-        // 此处暂不实现，留待上层调用 KnowledgeBaseRagService.indexText() 逐条入库
-        log.debug("待入库文本块数量: {}", segments.size());
-    }
 }
