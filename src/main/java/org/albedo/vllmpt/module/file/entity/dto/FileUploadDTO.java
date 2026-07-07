@@ -10,4 +10,5 @@ public class FileUploadDTO {
     String MimeType;
     String businessId;
     String etag;
+
 }

@@ -40,7 +40,8 @@ import static org.apache.commons.compress.utils.FileNameUtils.getExtension;
 @Slf4j
 public class MinioService {
     private static final Semaphore processingLimiter = new Semaphore(4);
-    private static final File TEMP_BASE_DIR = new File("/data/app_temp/");
+    private static final File TEMP_BASE_DIR = new File("data/app_temp/");
+    private static final long MIN_DISK_SPACE_BYTES = 2L * 1024 * 1024 * 1024; // 2GB
 
     @Autowired
     private MinioClient minioClient;
@@ -80,9 +81,7 @@ public class MinioService {
                             .object(fileUploadDTO.getObjectName())
                             .bucket(targetBucket)
                             .build());
-
-        log.info("========{}", stat.contentType());
-
+            fileUploadDTO.setMimeType( stat.contentType());
             return  stat.etag().equals(fileUploadDTO.getEtag());
         }catch (ErrorResponseException  e){
             if ("NoSuchKey".equals(e.errorResponse().code())) {
@@ -101,10 +100,10 @@ public class MinioService {
 
     }
 
-    public void  FileChangeBucket(FileUploadDTO fileUploadDTO,String  source,String target){
+    public String  FileChangeBucket(FileUploadDTO fileUploadDTO,String  source,String target){
             try{
                 String fileType = resolveFileType(fileUploadDTO.getMimeType());
-                String finalObjectName = "fileType"+"/" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "/" + fileUploadDTO.getObjectName();
+                String finalObjectName = fileType+"/" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "/" + fileUploadDTO.getObjectName();
 
                 minioClient.copyObject(CopyObjectArgs.builder()
                                 .bucket(target)
@@ -120,96 +119,93 @@ public class MinioService {
                                 .object(fileUploadDTO.getObjectName())
                                 .build()
                 );
+                // 数据库 存储 文件信息,方便后续调用,最好带会话id+用户id;
+                return finalObjectName;
             }catch(Exception e){
                 log.info("文件转移失败",e);
                 throw  new BusinessException(500,"文件转移失败");
 
             }
-            // 数据库 存储 文件信息,方便后续调用,最好带会话id+用户id;
-
-
-        return;
     }
 
-    public  boolean processFileFromMinIO(FileUploadDTO fileUploadDTO,String  source){
-
+    public  boolean processFileFromMinIO(String finalObjectName,String  source){
 
        try{
+           long usableSpace = TEMP_BASE_DIR.getUsableSpace();
+           if (usableSpace < MIN_DISK_SPACE_BYTES) {
+               log.error("磁盘空间不足，拒绝处理。当前可用: {} bytes, 需要: {} bytes", usableSpace, MIN_DISK_SPACE_BYTES);
+               return false; // 或者抛出业务异常
+           }
            StatObjectResponse stat = minioClient.statObject(
                    StatObjectArgs.builder()
                            .bucket(source)
-                           .object(fileUploadDTO.getObjectName())
+                           .object(finalObjectName)
                            .build());
            //确认文件大小,后缀.,准备存放
-           InputStream minioStream = minioClient.getObject(
-                    GetObjectArgs.builder()
-                            .bucket(source)
-                            .object(fileUploadDTO.getObjectName())
-                            .build());
+
 
            long fileSize = stat.size();
            String contentType = stat.contentType();
-           if (TEMP_BASE_DIR.getFreeSpace() < 2L * 1024 * 1024 * 1024) { // 小于 2GB
-               throw new RuntimeException("磁盘空间不足，拒绝处理");
-           }
+               log.info("file size {}",fileSize);
+               log.info("file contentType {}",contentType);
 
            processingLimiter.acquire();
-           log.info("file size {}",fileSize);
-           log.info("file contentType {}",contentType);
-           // 5. 分级处理逻辑
-//           if (isTextFile(contentType) && fileSize < 2 * 1024 * 1024) {
-//               // 【TXT/小文本】：纯内存处理，不落盘
-//               processInMemory(bucketName, objectName);
-//           } else {
-//               // 【图片/PDF】：下载到本地 SSD 临时目录
-//               processWithLocalTempFile(bucketName, objectName, contentType);
-//           }
+           try{
+               try (InputStream minioStream = minioClient.getObject(
+                       GetObjectArgs.builder()
+                               .bucket(source)
+                               .object(finalObjectName)
+                               .build())) {
 
-           processingLimiter.release();
+                   // TODO: 在这里使用 minioStream 进行实际处理
+                   // 例如：将流写入本地临时文件，或直接解析内容
+                    processWithLocalTempFile(minioStream, stat);
 
+                   log.info("文件处理成功: {}", finalObjectName);
+
+           }
+           }finally {
+               processingLimiter.release();
+           }
        }catch (Exception e){
            log.warn("minioStream Error",e);
+           return  false;
        }
 
         return  true;
     }
 
-//    private void processWithLocalTempFile(String bucket, String objectName, String contentType) {
-//        // 创建按日期和类型分类的临时文件
-//        String dateDir = LocalDate.now().toString();
+    private void processWithLocalTempFile(InputStream minioStream,StatObjectResponse stat) {
+        // 创建按日期和类型分类的临时文件
+        String dateDir = LocalDate.now().toString();
 //        String typeDir = getFileTypeDir(contentType); // 返回 "pdf" 或 "image"
-//        File dir = new File(TEMP_BASE_DIR, dateDir + "/" + typeDir);
-//        dir.mkdirs();
-//
-//        File tempFile = new File(dir, UUID.randomUUID() + "_" + objectName);
-//
-//        try {
-//            // 7. 流式下载到本地磁盘（边读边写，不占满内存）
-//            try (InputStream in = minioClient.getObject(
-//                    GetObjectArgs.builder()
-//                            .object(objectName)
-//                            .bucket(bucket)
-//                            .build());
-//                 OutputStream out = new FileOutputStream(tempFile)) {
-//                byte[] buffer = new byte[8192];
-//                int len;
-//                while ((len = in.read(buffer)) != -1) {
-//                    out.write(buffer, 0, len);
-//                }
-//            }
-//
-//            // 8. 执行具体的解析和向量化（OCR / PDF解析）
+        File dir = new File(TEMP_BASE_DIR, dateDir + "/" + stat.contentType());
+            dir.mkdirs();
+
+        File tempFile = new File(dir, UUID.randomUUID() + "_" + stat.object());
+
+        try {
+            // 7. 流式下载到本地磁盘（边读边写，不占满内存）
+            try (OutputStream out = new FileOutputStream(tempFile)) {
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = minioStream.read(buffer)) != -1) {
+                    out.write(buffer, 0, len);
+                }
+            }
+
+            // 8. 执行具体的解析和向量化（OCR / PDF解析）
 //            vectorizeFile(tempFile, contentType);
-//
-//        } catch (Exception e) {
-//            log.error("处理文件失败: {}", objectName, e);
-//        } finally {
-//            // 9. 核心：无论成功失败，必须删除临时文件
-//            if (tempFile.exists() && !tempFile.delete()) {
-//                log.warn("临时文件删除失败，等待兜底任务清理: {}", tempFile.getAbsolutePath());
-//            }
-//        }
-//    }
+
+        } catch (Exception e) {
+            log.error("处理文件失败: {}", stat.object(), e);
+        } finally {
+            // 9. 核心：无论成功失败，必须删除临时文件
+            if (tempFile.exists() && !tempFile.delete()) {
+                log.warn("临时文件删除失败，等待兜底任务清理: {}", tempFile.getAbsolutePath());
+            }
+        }
+    }
     /**
      * 根据 MimeType 判断文件类型
      */

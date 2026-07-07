@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.module.chat.handler;
+package org.albedo.vllmpt.module.chat.handler.chatFilesProcessor;
 
 import dev.langchain4j.data.message.TextContent;
 import org.albedo.vllmpt.module.ai.extractor.DocumentExtractor;
@@ -44,7 +44,7 @@ public class DocumentProcessor implements AttachmentProcessor {
                     false, null
             );
         } else {
-            // 长内容：生成摘要，并触发异步向量化
+            // 长内容：生成摘要，并触发异步向量化(why?)
             String summary = generateSummary(fullText); // 可调用小模型或截取前几行
 //            List<TextSegment> segments = splitter.split(fullText, 500);
 //            // 异步存储到向量库（或同步，视需求）

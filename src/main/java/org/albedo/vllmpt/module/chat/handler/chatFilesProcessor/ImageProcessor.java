@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.module.chat.handler;
+package org.albedo.vllmpt.module.chat.handler.chatFilesProcessor;
 
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
