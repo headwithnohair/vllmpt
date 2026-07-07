@@ -32,6 +32,7 @@ public class EmbeddingTextController {
          log.info("test4");
 
          //确认文件类型 是否支持向量化
+         //后期引入 Tika 做头数据校验;
 
          // 保存数据
          minioService.processFileFromMinIO(finalObjectName,"vllmpt-data");
