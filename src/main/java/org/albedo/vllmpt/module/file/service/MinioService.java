@@ -82,7 +82,7 @@ public class MinioService {
                             .bucket(targetBucket)
                             .build());
             fileUploadDTO.setMimeType( stat.contentType());
-            fileUploadDTO.setFileSize((double) stat.size());
+            fileUploadDTO.setFileSize( stat.size());
             fileUploadDTO.setEtag(stat.etag());
             return  stat.etag().equals(fileUploadDTO.getEtag());
         }catch (ErrorResponseException  e){
@@ -159,11 +159,11 @@ public class MinioService {
                                .object(finalObjectName)
                                .build())) {
 
-                   // TODO: 在这里使用 minioStream 进行实际处理
-                   // 例如：将流写入本地临时文件，或直接解析内容
+                    // TODO: 在这里使用 minioStream 进行实际处理
+                    // 例如：将流写入本地临时文件，或直接解析内容
                     processWithLocalTempFile(minioStream, stat);
 
-                   log.info("文件处理成功: {}", finalObjectName);
+                    log.info("文件处理成功: {}", finalObjectName);
 
            }
            }finally {

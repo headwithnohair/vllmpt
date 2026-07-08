@@ -4,6 +4,7 @@ package org.albedo.vllmpt.module.chat.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.module.chat.service.FileParser;
+import org.albedo.vllmpt.module.chat.service.impl.FileParserRegistry;
 import org.albedo.vllmpt.module.file.entity.dto.FileUploadDTO;
 import org.albedo.vllmpt.module.file.service.MinioService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,11 +25,12 @@ public class EmbeddingTextController {
      MinioService minioService;
 
      @Autowired
-     FileParser fileParser;
+     FileParserRegistry fileParserRegistry;
 
 
      @PostMapping("/file")
     public Result<String> indexFile(@RequestBody FileUploadDTO fileUploadDTO){
+         int MIN_SAVE_SIZE =1024*1024*2;
          // log.info("{}",fileUploadDTO);
         // 确认前端确实传递了文件,
         minioService.FileExistCheck(fileUploadDTO,"vllmpt-temp");
@@ -36,15 +38,16 @@ public class EmbeddingTextController {
          String finalObjectName = minioService.FileChangeBucket(fileUploadDTO,"vllmpt-temp","vllmpt-data");
          log.info("test4");
 
+
+         //Tika  做头数据校验
          //确认文件类型  是否支持向量化
-         //后期引入  Tika  做头数据校验;
+         FileParser fileParser=fileParserRegistry.getParser(fileUploadDTO.getMimeType());
+
+         long  fileSize=fileUploadDTO.getFileSize();
+
          //确认文件大小 大的采用流式 小的使用内存
 
 
-
-
-         // 保存数据
-         minioService.processFileFromMinIO(finalObjectName,"vllmpt-data");
 
          //分配文件解析器,然后进行向量化.
          log.info("test4");
@@ -60,11 +63,9 @@ public class EmbeddingTextController {
     public void DownloadFile(@RequestBody FileUploadDTO fileUploadDTO){
 
 //         log.info("{}",fileUploadDTO);
-        // 确认前端确实 传递了文件,
-        log.info("test4");
+        // 确认前端确实  传递了文件,
         // 保存数据
         minioService.processFileFromMinIO(fileUploadDTO.getObjectName(),"vllmpt-data");
-        log.info("test4");
         // 返还拆分结果,
 
         return;

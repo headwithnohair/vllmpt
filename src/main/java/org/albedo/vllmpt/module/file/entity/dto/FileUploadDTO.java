@@ -6,7 +6,7 @@ import lombok.Data;
 public class FileUploadDTO {
 
     String objectName;
-    Double fileSize;
+    long  fileSize;
     String MimeType;
     String businessId;
     String etag;

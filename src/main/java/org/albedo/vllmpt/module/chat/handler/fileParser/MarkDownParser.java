@@ -6,15 +6,21 @@ import org.albedo.vllmpt.module.chat.service.FileParser;
 
 public class MarkDownParser implements FileParser {
 
+    private final String SupportType ="text/markdown";
     @Override
     public boolean supports(String type) {
 
 
-        return type.equals("text/markdown");
+        return type.equals(SupportType);
     }
 
     @Override
     public FileParseResult process(Attachment attachment) {
         return null;
+    }
+
+    @Override
+    public String getSupportTypes() {
+        return SupportType;
     }
 }

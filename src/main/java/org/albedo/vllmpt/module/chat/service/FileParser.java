@@ -8,4 +8,5 @@ public interface FileParser {
 
     boolean supports(String type);  // 判断是否能处理该类型
     FileParseResult process(Attachment attachment);
+    String getSupportTypes();
 }

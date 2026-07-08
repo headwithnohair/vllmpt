@@ -9,9 +9,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PlainTextParser implements FileParser {
+
+
+    private final String SupportType ="text/plain";
     @Override
     public boolean supports(String type) {
-        return type.equals("text/plain");
+        return type.equals(SupportType);
     }
 
     @Override
@@ -28,5 +31,10 @@ public class PlainTextParser implements FileParser {
 
 
         return null;
+    }
+
+    @Override
+    public String getSupportTypes() {
+        return SupportType;
     }
 }
