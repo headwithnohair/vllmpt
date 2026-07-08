@@ -97,9 +97,6 @@ public class MinioService {
             throw new RuntimeException("MinIO statObject failed", e);
         }
 
-
-
-
     }
 
     public String  FileChangeBucket(FileUploadDTO fileUploadDTO,String  source,String target){

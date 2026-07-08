@@ -38,12 +38,12 @@ public class EmbeddingTextController {
          String finalObjectName = minioService.FileChangeBucket(fileUploadDTO,"vllmpt-temp","vllmpt-data");
          log.info("test4");
 
-
          //Tika  做头数据校验
          //确认文件类型  是否支持向量化
          FileParser fileParser=fileParserRegistry.getParser(fileUploadDTO.getMimeType());
 
          long  fileSize=fileUploadDTO.getFileSize();
+
 
          //确认文件大小 大的采用流式 小的使用内存
 
