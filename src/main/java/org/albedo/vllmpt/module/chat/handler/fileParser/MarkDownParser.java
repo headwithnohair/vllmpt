@@ -8,8 +8,9 @@ public class MarkDownParser implements FileParser {
 
     @Override
     public boolean supports(String type) {
-        // "text/markdown"
-        return false;
+
+
+        return type.equals("text/markdown");
     }
 
     @Override

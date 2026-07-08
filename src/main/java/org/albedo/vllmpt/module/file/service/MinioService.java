@@ -82,6 +82,8 @@ public class MinioService {
                             .bucket(targetBucket)
                             .build());
             fileUploadDTO.setMimeType( stat.contentType());
+            fileUploadDTO.setFileSize((double) stat.size());
+            fileUploadDTO.setEtag(stat.etag());
             return  stat.etag().equals(fileUploadDTO.getEtag());
         }catch (ErrorResponseException  e){
             if ("NoSuchKey".equals(e.errorResponse().code())) {

@@ -16,7 +16,11 @@ public class AttachmentProcessorRegistry {
     @Autowired
     public void registerProcessors(List<AttachmentProcessor> processors) {
 
+
+
         for (AttachmentProcessor p : processors) {
+            //getFirst 注意  目前只支持 image !!
+            // 后面再考虑其他
             if (p.supports(supportSet.getFirst())) {
                 processorMap.put(supportSet.getFirst(), p);
             }
