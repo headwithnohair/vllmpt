@@ -205,6 +205,16 @@ public class MinioService {
             }
         }
     }
+
+    public InputStream getFileStream(String ObjectName,String  source) throws Exception {
+        // 直接返回 MinIO 的流
+        return minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(source)
+                        .object(ObjectName)
+                        .build()
+        );
+    }
     /**
      * 根据 MimeType 判断文件类型
      */

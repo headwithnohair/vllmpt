@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.Map;
 
 @RestController
@@ -42,10 +43,14 @@ public class EmbeddingTextController {
          //确认文件类型  是否支持向量化
          FileParser fileParser=fileParserRegistry.getParser(fileUploadDTO.getMimeType());
 
-         long  fileSize=fileUploadDTO.getFileSize();
+         try( InputStream inputStream= minioService.getFileStream(finalObjectName,"vllmpt-data")){
+             fileParser.process(inputStream,fileUploadDTO);
+         }catch (Exception e){
+             log.warn("Error ",e);
+         }
+            //最好是 异步返回 traceId
 
 
-         //确认文件大小 大的采用流式 小的使用内存
 
 
 

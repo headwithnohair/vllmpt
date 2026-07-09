@@ -3,6 +3,9 @@ package org.albedo.vllmpt.module.chat.handler.fileParser;
 import org.albedo.vllmpt.module.chat.model.entity.Attachment;
 import org.albedo.vllmpt.module.chat.model.entity.FileParseResult;
 import org.albedo.vllmpt.module.chat.service.FileParser;
+import org.albedo.vllmpt.module.file.entity.dto.FileUploadDTO;
+
+import java.io.InputStream;
 
 public class MarkDownParser implements FileParser {
 
@@ -15,7 +18,8 @@ public class MarkDownParser implements FileParser {
     }
 
     @Override
-    public FileParseResult process(Attachment attachment) {
+    public FileParseResult process(InputStream inputStream , FileUploadDTO fileUploadDTO) {
+
         return null;
     }
 
