@@ -48,17 +48,11 @@ public class EmbeddingTextController {
          }catch (Exception e){
              log.warn("Error ",e);
          }
-            //最好是 异步返回 traceId
-
-
-
-
-
+         //最好是 异步返回 traceId
          //分配文件解析器,然后进行向量化.
+
          log.info("test4");
          // 返还拆分结果,
-
-
          //理应不直接返回文件名
          //但简化一下,先不处理
         return Result.success(finalObjectName);
