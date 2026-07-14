@@ -57,6 +57,16 @@ public class KnowledgeBaseRagServiceImpl   {
         knowledgeBaseEmbeddingStore.add(embedding, TextSegment.from(text));
     }
 
+    public void indexTextSegment(TextSegment textSegment) {
+
+        EmbeddingModel model = embeddingModelFactory.createModel(modelName, dimension);
+        // 2. 调用模型进行向量化
+        Embedding embedding = model.embed(textSegment).content();
+
+        // 3. 调用 Store 存入数据库
+        knowledgeBaseEmbeddingStore.add(embedding, textSegment);
+    }
+
     public List<Content> searchRelevantTexts(String query, int maxResults,Double minScore) {
         EmbeddingModel model = embeddingModelFactory.createModel(modelName, dimension);
         Embedding queryEmbedding= model.embed(query).content();
@@ -73,7 +83,7 @@ public class KnowledgeBaseRagServiceImpl   {
 
         Query text = Query.from(query);
         Map<Query, Collection<List<Content>>> queryToContents = new HashMap<>();
-        // 将你的 contents 列表放入一个 Collection 中
+        // 将你的 contents 列表放入一个 Collection
 
         queryToContents.put(text, List.of(contents));
 
