@@ -2,12 +2,14 @@ package org.albedo.vllmpt.module.ai.service;
 
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class EmbeddingModelFactory {
 
@@ -35,7 +37,7 @@ public class EmbeddingModelFactory {
                 .baseUrl(embeddingBaseUrl)
                 .apiKey(apiKey)
                 .modelName(modelName)
-                .dimensions(dim)
+//                .dimensions(dim)
                 .build());
     }
 

@@ -16,6 +16,7 @@ public class TextEmbedding {
 
     public void   chunkEmbeding(TextSegment textSegment){
         // 向量化并存储
+        log.info("{}",textSegment);
         knowledgeBaseRagService.indexTextSegment(textSegment);
 
     }

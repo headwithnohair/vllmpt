@@ -1,10 +1,12 @@
 package org.albedo.vllmpt.module.chat.controller;
 
 
+import dev.langchain4j.rag.content.Content;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.module.chat.service.FileParser;
 import org.albedo.vllmpt.module.chat.service.impl.FileParserRegistry;
+import org.albedo.vllmpt.module.chat.service.impl.KnowledgeBaseRagServiceImpl;
 import org.albedo.vllmpt.module.file.entity.dto.FileUploadDTO;
 import org.albedo.vllmpt.module.file.service.MinioService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -28,7 +31,8 @@ public class EmbeddingTextController {
      @Autowired
      FileParserRegistry fileParserRegistry;
 
-
+    @Autowired
+    KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
      @PostMapping("/file")
     public Result<String> indexFile(@RequestBody FileUploadDTO fileUploadDTO){
          int MIN_SAVE_SIZE =1024*1024*2;
@@ -70,4 +74,16 @@ public class EmbeddingTextController {
         return;
     }
 
+    @PostMapping("/indexString")
+    public void indexString(@RequestBody String str){
+
+        knowledgeBaseRagService.indexText(str);
+    }
+
+    @PostMapping("/searchEmbd")
+    public void searchEmbd(@RequestBody String str){
+
+      List<Content> list=  knowledgeBaseRagService.searchRelevantTexts(str,3,0.7);
+      log.info(list.toString());
+     }
 }

@@ -193,6 +193,7 @@ public class PlainTextParser implements FileParser {
      * 当前为占位实现，后续接入 Embedding 模型时在此处实现。
      */
     private void emitChunk(String text, FileUploadDTO fileUploadDTO, long chunkIndex) {
+//        log.info("{} ==== {} ====={}",text,chunkIndex,fileUploadDTO.getObjectName());
         Metadata metadata = new Metadata()
                 .put("fileName", fileUploadDTO.getObjectName())
                 .put("fileType", fileUploadDTO.getMimeType())

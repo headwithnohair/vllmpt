@@ -89,7 +89,7 @@ langchain4j:
       top-p: 0.9
     embedding-model:
       model-name: BAAI/bge-m3
-      dimension: 8192
+      dimension: 1024
     reranker-model:
       model-name: BAAI/bge-reranker-v2-m3
 

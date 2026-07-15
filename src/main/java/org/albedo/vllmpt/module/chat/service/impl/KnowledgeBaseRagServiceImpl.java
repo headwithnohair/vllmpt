@@ -10,11 +10,13 @@ import dev.langchain4j.rag.query.Query;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.module.ai.service.EmbeddingModelFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class KnowledgeBaseRagServiceImpl   {
 
@@ -47,12 +50,13 @@ public class KnowledgeBaseRagServiceImpl   {
     }
 
 
-    public void indexText(String text) {
+    public void indexText(@RequestBody  String text) {
 
         EmbeddingModel model = embeddingModelFactory.createModel(modelName, dimension);
         // 2. 调用模型进行向量化
+        log.info(text);
         Embedding embedding = model.embed(text).content();
-
+        
         // 3. 调用 Store 存入数据库
         knowledgeBaseEmbeddingStore.add(embedding, TextSegment.from(text));
     }
