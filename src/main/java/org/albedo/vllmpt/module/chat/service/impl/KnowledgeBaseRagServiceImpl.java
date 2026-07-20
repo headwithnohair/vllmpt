@@ -87,10 +87,12 @@ public class KnowledgeBaseRagServiceImpl   {
 
         Query text = Query.from(query);
         Map<Query, Collection<List<Content>>> queryToContents = new HashMap<>();
-        // 将你的 contents 列表放入一个 Collection
+        // 将 contents 列表放入一个 Collection
 
         queryToContents.put(text, List.of(contents));
 
-        return contentAggregator.aggregate(queryToContents);
+        //重排序  如在知识库构建上 有overlap 则要考虑拼接chunk ;
+        //在aggregate 后新增函数进行拼接,留意上下文长度
+            return contentAggregator.aggregate(queryToContents);
     }
 }

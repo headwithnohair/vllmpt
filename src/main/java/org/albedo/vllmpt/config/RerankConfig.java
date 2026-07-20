@@ -27,6 +27,8 @@ public class RerankConfig {
 
     @Bean
     public ContentAggregator contentAggregator(ScoringModel scoringModel) {
+
+
         return ReRankingContentAggregator.builder()
                 .scoringModel(scoringModel)
                 .maxResults(5)   // 重排后保留的文档数

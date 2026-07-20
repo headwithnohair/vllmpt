@@ -60,28 +60,33 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, request.getText(), request.getAttachments());
         List<Content> currentContents = new ArrayList<>();
         currentContents.add(TextContent.from(resolveResult.memoryText));
-        log.info("resolveResult.memoryText:{}", resolveResult.memoryText);
+//        log.info("resolveResult.memoryText:{}", resolveResult.memoryText);
         currentContents.addAll(resolveResult.contentsForModel);
-        log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
+//        log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
         UserMessage currentUserMsg = UserMessage.from(currentContents);
 
         // 使用 预设知识库 进行搜索
         List<dev.langchain4j.rag.content.Content> list= knowledgeBaseRagService.searchRelevantTexts(request.getText(),5,0.7);
+
         String systemPrompt= buildSystemPromptWithContent(list);
         SystemMessage systemMessage =SystemMessage.from(systemPrompt) ;
 
-        // 3. 合并历史消息（历史 + 当前）
+
+
+        // 内存 token审查
+
+        //  合并历史消息（历史 + 当前）
         List<ChatMessage> allMessages = new ArrayList<>();
 
         allMessages.add(systemMessage);
         allMessages.addAll(memory.messages());
         allMessages.add(currentUserMsg);
 
-        // 4. 调用模型（动态创建，支持多轮）
+        //  调用模型（动态创建，支持多轮）
         ChatModel chatModel = chatModelFactory.createModel(request.getModelName(), request.getTemperature(), request.getMaxTokens());
         AiMessage aiMessage = chatModel.chat(allMessages).aiMessage();
 
-        // 5. 更新记忆（只存纯文本摘要）
+        //  更新记忆（只存纯文本摘要）
         memory.add(UserMessage.from(resolveResult.memoryText));
         memory.add(aiMessage);
 
