@@ -40,7 +40,7 @@ public class KnowledgeBaseRagServiceImpl   {
 
 
     @Autowired
-    private ContentAggregator contentAggregator ;
+    private ContentAggregator contentAggregator;
 
     private final EmbeddingStore<TextSegment> knowledgeBaseEmbeddingStore;
 

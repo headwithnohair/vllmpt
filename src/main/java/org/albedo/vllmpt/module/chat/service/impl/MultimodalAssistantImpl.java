@@ -46,6 +46,8 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
 
     @Autowired
     private  KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
+
+    //在代码中增加 MemoryMXBean 监控  自动熔断
     /**
      * 处理多张图片 + 文本
      */
@@ -60,18 +62,16 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, request.getText(), request.getAttachments());
         List<Content> currentContents = new ArrayList<>();
         currentContents.add(TextContent.from(resolveResult.memoryText));
-//        log.info("resolveResult.memoryText:{}", resolveResult.memoryText);
+//      log.info("resolveResult.memoryText:{}", resolveResult.memoryText);
         currentContents.addAll(resolveResult.contentsForModel);
-//        log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
+//      log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
         UserMessage currentUserMsg = UserMessage.from(currentContents);
 
         // 使用 预设知识库 进行搜索
         List<dev.langchain4j.rag.content.Content> list= knowledgeBaseRagService.searchRelevantTexts(request.getText(),5,0.7);
 
         String systemPrompt= buildSystemPromptWithContent(list);
-        SystemMessage systemMessage =SystemMessage.from(systemPrompt) ;
-
-
+        SystemMessage systemMessage =SystemMessage.from(systemPrompt);
 
         // 内存 token审查
 
