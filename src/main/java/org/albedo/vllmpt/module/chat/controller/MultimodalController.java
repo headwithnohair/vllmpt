@@ -40,4 +40,15 @@ public class MultimodalController {
                     .start();
         });
     }
+
+
+    @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Map<String, String> easyReply(@RequestBody MultimodalChatRequest request) {
+
+        if (request.getAttachments() == null) {
+            throw new BusinessException("Attachments required");
+        }
+        String response = "132";
+        return Map.of("response", response);
+    }
 }

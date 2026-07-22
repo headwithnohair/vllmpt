@@ -3,6 +3,7 @@
 2.重排序
 2.图片向量化
 3. funtion calling ReAct模式
+3.对于tool注入,先全量注入 ,后续考虑工具描述向量化,通过用户输入检索向量相关性,返回相关tool,进行选择性注入
 4.后期考虑 workFlow
 
 5.智能路由 (Router) +规范 输出格式 匹配到 计划提示词 (Visual Query Rewriting) 提升颗粒度

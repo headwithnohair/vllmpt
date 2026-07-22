@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.module.ai.model.entity;
+package org.albedo.vllmpt.module.ai.model.dto;
 
 import lombok.Data;
 

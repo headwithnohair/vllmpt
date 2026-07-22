@@ -7,10 +7,10 @@ import lombok.Data;
 @Builder
 public class StageAudit {
     private String stageName;
-    private int inputMessageCount;
-    private int outputMessageCount;
-    private int inputTokens;
-    private int outputTokens;
-    private long costMs;
+    private int    inputMessageCount;
+    private int    outputMessageCount;
+    private int    inputTokens;
+    private int    outputTokens;
+    private long   costMs;
     private String summary; // 人类可读的操作描述
 }
