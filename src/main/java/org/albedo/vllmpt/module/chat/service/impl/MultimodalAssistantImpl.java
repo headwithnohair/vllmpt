@@ -14,6 +14,7 @@ import org.albedo.vllmpt.module.ai.service.ChatModelFactory;
 import org.albedo.vllmpt.module.ai.service.EmbeddingModelFactory;
 import org.albedo.vllmpt.module.ai.service.MultimodalContentResolver;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
+import org.albedo.vllmpt.module.chat.service.Assistant;
 import org.albedo.vllmpt.module.chat.service.MultimodalAssistant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -35,14 +36,11 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     private ChatModelFactory chatModelFactory;
 
     @Autowired
-    private EmbeddingModelFactory embeddingModelFactory;
-
-    @Autowired
     private MultimodalContentResolver contentResolver;
 
-
     @Autowired
-    private  UserProfileRagService userProfileRagService;
+    private Assistant assistant;
+
 
     @Autowired
     private  KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
@@ -127,7 +125,13 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         );
     }
 
+    public String chatSimple(MultimodalChatRequest request){
 
+
+
+
+        return "";
+    }
     private String buildSystemPromptWithContent(List<dev.langchain4j.rag.content.Content> contents) {
         if (contents == null || contents.isEmpty()) {
             return """
