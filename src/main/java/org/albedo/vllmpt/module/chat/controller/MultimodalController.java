@@ -25,7 +25,6 @@ public class MultimodalController {
         String response = multimodalAssistant.chatWithMultipleFiles(request);
         return Map.of("response", response);
     }
-
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamChatWithFiles(@RequestBody MultimodalChatRequest request) {
 
@@ -48,7 +47,8 @@ public class MultimodalController {
         if (request.getAttachments() == null) {
             throw new BusinessException("Attachments required");
         }
-        String response = "132";
+
+        String response = "";
         return Map.of("response", response);
     }
 }
