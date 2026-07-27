@@ -84,6 +84,10 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         ChatModel chatModel = chatModelFactory.createModel(request.getModelName(), request.getTemperature(), request.getMaxTokens());
         AiMessage aiMessage = chatModel.chat(allMessages).aiMessage();
 
+        // 检查状态 1. 思考 2. 调用tool   则继续while循环
+        // 生成的文本放入当前对话 不放入记忆管理
+        // 只在循环结束后 选择性加入记忆或者进行摘要
+
         //  更新记忆（只存纯文本摘要）
         memory.add(UserMessage.from(resolveResult.memoryText));
         memory.add(aiMessage);
