@@ -1,6 +1,7 @@
 package org.albedo.vllmpt.module.chat.service;
 
-import org.albedo.vllmpt.module.chat.model.entity.ChatMessage;
+
+import dev.langchain4j.data.message.ChatMessage;
 import org.albedo.vllmpt.module.chat.model.entity.PipelineContext;
 
 import java.util.List;
