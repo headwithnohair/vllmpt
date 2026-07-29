@@ -44,7 +44,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
 
 
     @Autowired
-    private  KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
+    private KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
 
     //在代码中增加 MemoryMXBean 监控  自动熔断
     /**
@@ -54,7 +54,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     public String chatWithMultipleFiles(MultimodalChatRequest request) {
 
         String sessionId = request.getSessionId();
-        // 1. 获取记忆
+        // 1.获取记忆
         ChatMemory memory = memoryProvider.get(sessionId);
 
         // 2. 解析附件，获取多模态内容和用于记忆的纯文本
@@ -84,7 +84,6 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         //  调用模型（动态创建，支持多轮）
         ChatModel chatModel = chatModelFactory.createModel(request.getModelName(), request.getTemperature(), request.getMaxTokens());
 
-
         // 检查状态 1.思考
         // 2. 调用tool   则继续while循环
         // 生成的文本放入当前对话 不放入记忆管理
@@ -102,14 +101,15 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                agentContext.getCurrentMessages().add(aiMessage2);
                //按指针理解,应该是成功add到list里面的
                log.info(agentContext.getCurrentMessages().toString());
-//             agentContext.setCurrentMessages();
+               //agentContext.setCurrentMessages();
+               // chat(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications)
 
            }else{
                agentContext.setFinalResult(aiMessage2);
                 break;
            }
             agentContext.addOneStepCount();
-           // 对当前进行摘要
+            // 对当前进行摘要
 
 
         }
