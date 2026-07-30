@@ -9,6 +9,7 @@ import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 
+import dev.langchain4j.model.chat.request.ChatRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.module.ai.service.ChatModelFactory;
 import org.albedo.vllmpt.module.ai.service.EmbeddingModelFactory;
@@ -76,11 +77,9 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
 
         //  合并历史消息（历史 + 当前）
         List<ChatMessage> allMessages = new ArrayList<>();
-
         allMessages.add(systemMessage);
         allMessages.addAll(memory.messages());
         allMessages.add(currentUserMsg);
-
         //  调用模型（动态创建，支持多轮）
         ChatModel chatModel = chatModelFactory.createModel(request.getModelName(), request.getTemperature(), request.getMaxTokens());
 
@@ -88,6 +87,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         // 2. 调用tool   则继续while循环
         // 生成的文本放入当前对话 不放入记忆管理
         // 只在循环结束后 选择性加入记忆或者进行摘要
+
         AgentContext agentContext=AgentContext.builder()
                 .stepCount(0)
                 .currentMessages(allMessages)
@@ -101,21 +101,21 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                agentContext.getCurrentMessages().add(aiMessage2);
                //按指针理解,应该是成功add到list里面的
                log.info(agentContext.getCurrentMessages().toString());
-               //agentContext.setCurrentMessages();
+               // agentContext.setCurrentMessages();
                // chat(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications)
 
            }else{
                agentContext.setFinalResult(aiMessage2);
                 break;
            }
-            agentContext.addOneStepCount();
+           agentContext.addOneStepCount();
             // 对当前进行摘要
-
-
         }
+
         AiMessage aiMessage =agentContext.getFinalResult();
-//        AiMessage aiMessage = chatModel.chat(allMessages).aiMessage();
+        //  AiMessage aiMessage = chatModel.chat(allMessages).aiMessage();
         //  更新记忆（只存纯文本摘要）
+        //
         memory.add(UserMessage.from(resolveResult.memoryText));
         memory.add(aiMessage);
 
