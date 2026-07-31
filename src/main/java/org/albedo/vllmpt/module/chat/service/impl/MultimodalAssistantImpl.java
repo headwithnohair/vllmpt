@@ -55,16 +55,19 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     public String chatWithMultipleFiles(MultimodalChatRequest request) {
 
         String sessionId = request.getSessionId();
-        // 1.获取记忆
+        // 获取记忆
         ChatMemory memory = memoryProvider.get(sessionId);
 
-        // 2. 解析附件，获取多模态内容和用于记忆的纯文本
-        MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, request.getText(), request.getAttachments());
         List<Content> currentContents = new ArrayList<>();
+        List<ChatMessage> allMessages = new ArrayList<>();
+
+
+        // 解析附件，获取多模态内容和用于记忆的纯文本
+        MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, request.getText(), request.getAttachments());
+
+        //将记忆用的图片imageMessage替换为文字标签 放入list ,解析后的文件 也放入列表,对于模型不支持的文件,转换为文字Message后放入list
         currentContents.add(TextContent.from(resolveResult.memoryText));
-//      log.info("resolveResult.memoryText:{}", resolveResult.memoryText);
         currentContents.addAll(resolveResult.contentsForModel);
-//      log.info("resolveResult.contentsForModel:{}", resolveResult.contentsForModel);
         UserMessage currentUserMsg = UserMessage.from(currentContents);
 
         // 使用 预设知识库 进行搜索
@@ -76,7 +79,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         // 内存 token审查
 
         //  合并历史消息（历史 + 当前）
-        List<ChatMessage> allMessages = new ArrayList<>();
+
         allMessages.add(systemMessage);
         allMessages.addAll(memory.messages());
         allMessages.add(currentUserMsg);
@@ -92,9 +95,13 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                 .stepCount(0)
                 .currentMessages(allMessages)
                 .build();
+        ChatRequest chatRequest = ChatRequest.builder()
+                .toolSpecifications()
+                .messages(allMessages)
+                .build();
         while(agentContext.getStepCount()<10)
         {
-            AiMessage aiMessage2= chatModel.chat(agentContext.getCurrentMessages()).aiMessage();
+            AiMessage aiMessage2= chatModel.chat(chatRequest).aiMessage();
            if (aiMessage2.hasToolExecutionRequests()){
 
                log.info("执行工具:{}",aiMessage2.toolExecutionRequests());
@@ -103,6 +110,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                log.info(agentContext.getCurrentMessages().toString());
                // agentContext.setCurrentMessages();
                // chat(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications)
+               // 上下文过大记得摘要
 
            }else{
                agentContext.setFinalResult(aiMessage2);
