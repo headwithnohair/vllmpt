@@ -95,16 +95,18 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                 .stepCount(0)
                 .currentMessages(allMessages)
                 .build();
-        ChatRequest chatRequest = ChatRequest.builder()
-                .toolSpecifications()
-                .messages(allMessages)
-                .build();
+
         while(agentContext.getStepCount()<10)
         {
+            ChatRequest chatRequest = ChatRequest.builder()
+                    .toolSpecifications()
+                    .messages(allMessages)
+                    .build();
             AiMessage aiMessage2= chatModel.chat(chatRequest).aiMessage();
            if (aiMessage2.hasToolExecutionRequests()){
 
                log.info("执行工具:{}",aiMessage2.toolExecutionRequests());
+
                agentContext.getCurrentMessages().add(aiMessage2);
                //按指针理解,应该是成功add到list里面的
                log.info(agentContext.getCurrentMessages().toString());
