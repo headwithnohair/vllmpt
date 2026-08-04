@@ -1,5 +1,6 @@
 package org.albedo.vllmpt.module.chat.service.impl;
 
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.document.Metadata;
 
 import dev.langchain4j.data.message.*;
@@ -18,6 +19,7 @@ import org.albedo.vllmpt.module.chat.model.dto.AgentContext;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
 import org.albedo.vllmpt.module.chat.service.Assistant;
 import org.albedo.vllmpt.module.chat.service.MultimodalAssistant;
+import org.albedo.vllmpt.module.chat.tool.ToolRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -40,13 +42,14 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
     @Autowired
     private MultimodalContentResolver contentResolver;
 
-    @Autowired
-    private Assistant assistant;
+
 
 
     @Autowired
     private KnowledgeBaseRagServiceImpl knowledgeBaseRagService;
 
+    @Autowired
+    private  ToolRegistry registry;
     //在代码中增加 MemoryMXBean 监控  自动熔断
     /**
      * 处理多张图片 + 文本
@@ -95,11 +98,12 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                 .stepCount(0)
                 .currentMessages(allMessages)
                 .build();
-
-        while(agentContext.getStepCount()<10)
+        List<ToolSpecification> specs=  registry.allSpecs();
+        while(agentContext.getStepCount()<5)
         {
+            log.info("计入循环{}",agentContext.getStepCount());
             ChatRequest chatRequest = ChatRequest.builder()
-                    .toolSpecifications()
+                    .toolSpecifications(specs)
                     .messages(allMessages)
                     .build();
             AiMessage aiMessage2= chatModel.chat(chatRequest).aiMessage();
@@ -109,11 +113,24 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
 
                agentContext.getCurrentMessages().add(aiMessage2);
                //按指针理解,应该是成功add到list里面的
-               log.info(agentContext.getCurrentMessages().toString());
+               log.info("输出当前信息{}",agentContext.getCurrentMessages());
                // agentContext.setCurrentMessages();
                // chat(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications)
                // 上下文过大记得摘要
-
+//               for (var toolRequest : aiMessage2.toolExecutionRequests()) {
+//                   String toolName = toolRequest.name();
+//                   String toolArgs = toolRequest.arguments(); // JSON 格式的参数
+//
+//                   log.info("大模型请求调用工具: {}, 参数: {}", toolName, toolArgs);
+//
+//                   // 执行工具方法 (DefaultToolExecutor 内部会处理 JSON 反序列化和反射调用)
+////                   Object toolResult = toolExecutor.execute(toolRequest, request.getSessionId());
+//
+//                   // 将工具执行结果转换为 LangChain4j 的消息格式
+//                   ToolExecutionResultMessage resultMessage = ToolExecutionResultMessage.from(
+//                           toolRequest,
+//                           toolResult.toString() // 工具返回值会作为上下文喂给大模型
+//                   );
            }else{
                agentContext.setFinalResult(aiMessage2);
                 break;

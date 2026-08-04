@@ -2,14 +2,17 @@ package org.albedo.vllmpt.module.chat.tool;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+@Slf4j
+@AiTool(groups = {"weather", "public"})
 @Component
-public class SimpleTool implements AiTools {
+public class SimpleTool   implements AiToolProvider  {
 
         @Tool("兜底回复工具。当用户的输入是纯问候语（如你好、嗨）、感谢语，或无法归类到其他业务工具时，调用此工具返回通用文案")
     public String  getAnswer(){
-
+            log.info("getAnswer 调用了");
         return "您好，有什么可以帮您的？";
     }
 
@@ -19,6 +22,7 @@ public class SimpleTool implements AiTools {
             "必须反问用户获取城市名。")
                                   String place){
 
+        log.info("getWeather 调用了  {}",place);
         return "晴天26度微风湿度50%适合出行";
     }
 }
