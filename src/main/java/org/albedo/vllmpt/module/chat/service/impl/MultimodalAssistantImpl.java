@@ -1,5 +1,6 @@
 package org.albedo.vllmpt.module.chat.service.impl;
 
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.document.Metadata;
 
@@ -117,20 +118,18 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                // agentContext.setCurrentMessages();
                // chat(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications)
                // 上下文过大记得摘要
-//               for (var toolRequest : aiMessage2.toolExecutionRequests()) {
-//                   String toolName = toolRequest.name();
-//                   String toolArgs = toolRequest.arguments(); // JSON 格式的参数
+               // ② 逐个执行工具
+               for (ToolExecutionRequest toolReq : aiMessage2.toolExecutionRequests()) {
+                   log.info("调用工具: {}  参数: {}", toolReq.name(), toolReq.arguments());
+
+                   // ★ 执行工具，拿到结果
+//                   String result = doExecute(toolReq);
+
+//                   log.info("工具返回: {}", result);
 //
-//                   log.info("大模型请求调用工具: {}, 参数: {}", toolName, toolArgs);
-//
-//                   // 执行工具方法 (DefaultToolExecutor 内部会处理 JSON 反序列化和反射调用)
-////                   Object toolResult = toolExecutor.execute(toolRequest, request.getSessionId());
-//
-//                   // 将工具执行结果转换为 LangChain4j 的消息格式
-//                   ToolExecutionResultMessage resultMessage = ToolExecutionResultMessage.from(
-//                           toolRequest,
-//                           toolResult.toString() // 工具返回值会作为上下文喂给大模型
-//                   );
+//                   // ③ 把结果包装成消息，加回上下文
+//                   allMessages.add(ToolExecutionResultMessage.from(toolReq, result));
+               }
            }else{
                agentContext.setFinalResult(aiMessage2);
                 break;
