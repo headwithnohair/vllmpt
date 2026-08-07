@@ -81,7 +81,6 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         SystemMessage systemMessage =SystemMessage.from(systemPrompt);
 
         // 内存 token审查
-
         //  合并历史消息（历史 + 当前）
 
         allMessages.add(systemMessage);

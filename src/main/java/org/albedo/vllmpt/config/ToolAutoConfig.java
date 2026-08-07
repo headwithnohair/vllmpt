@@ -1,5 +1,6 @@
 package org.albedo.vllmpt.config;
 
+import dev.langchain4j.service.tool.DefaultToolExecutor;
 import org.albedo.vllmpt.module.chat.tool.AiTool;
 import org.albedo.vllmpt.module.chat.tool.AiToolProvider;
 import org.albedo.vllmpt.module.chat.tool.ToolRegistry;
@@ -24,9 +25,8 @@ public class ToolAutoConfig {
                 .filter(b -> b.getClass().isAnnotationPresent(AiTool.class))
                 .forEach(bean -> {
                     AiTool meta = bean.getClass().getAnnotation(AiTool.class);
-                    registry.register(bean, meta.groups());
+                    registry.register((DefaultToolExecutor) bean, meta.groups());
                 });
-
         return registry;
     }
 }
