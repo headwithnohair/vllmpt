@@ -25,7 +25,7 @@ public class ToolAutoConfig {
                 .filter(b -> b.getClass().isAnnotationPresent(AiTool.class))
                 .forEach(bean -> {
                     AiTool meta = bean.getClass().getAnnotation(AiTool.class);
-                    registry.register((DefaultToolExecutor) bean, meta.groups());
+                    registry.register(bean, meta.groups());
                 });
         return registry;
     }

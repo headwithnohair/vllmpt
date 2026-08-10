@@ -122,12 +122,12 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                    log.info("调用工具: {}  参数: {}", toolReq.name(), toolReq.arguments());
 
                    // ★ 执行工具，拿到结果
-//                   String result = doExecute(toolReq);
+                   String result = registry.execute(toolReq);
 
-//                   log.info("工具返回: {}", result);
-//
-//                   // ③ 把结果包装成消息，加回上下文
-//                   allMessages.add(ToolExecutionResultMessage.from(toolReq, result));
+                   log.info("工具返回: {}", result);
+
+                   // ③ 把结果包装成消息，加回上下文
+                   allMessages.add(ToolExecutionResultMessage.from(toolReq, result));
                }
            }else{
                agentContext.setFinalResult(aiMessage2);

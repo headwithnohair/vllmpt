@@ -1,91 +1,147 @@
 package org.albedo.vllmpt.module.chat.tool;
 
+import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.agent.tool.ToolSpecifications;
 import dev.langchain4j.service.tool.DefaultToolExecutor;
+import dev.langchain4j.service.tool.ToolExecutor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
 
+import java.lang.reflect.Method;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * 工具注册表 —— 统一管理所有工具的注册、检索、分组
+ * 工具注册表 —— 统一管理所有工具的注册、检索、执行
  */
 @Slf4j
 public class ToolRegistry {
 
-    // key: 工具名称, value: 工具实例
-    private final Map<String, DefaultToolExecutor> executors = new LinkedHashMap<>();
-    // key: 分组标签, value: 该组下的工具名称
+    /**
+     * 核心映射：工具方法名 -> ToolExecutor
+     * key 是大模型看到的工具名（即 @Tool 方法名），value 是对应的执行器
+     */
+    private final Map<String, ToolExecutor> executors = new LinkedHashMap<>();
+
+    /**
+     * 保留原始工具实例，用于生成 ToolSpecification
+     * （因为 ToolSpecifications.toolSpecificationsFrom 需要原始对象）
+     */
+    private final List<Object> rawToolInstances = new ArrayList<>();
+
+    /**
+     * 分组索引：分组标签 -> 该组下的工具方法名集合
+     */
     private final Map<String, Set<String>> groupIndex = new LinkedHashMap<>();
 
-    /** 注册单个工具，可带分组 */
-    public ToolRegistry register(DefaultToolExecutor toolObj, String... groups) {
-        String name = toolObj.getClass().getSimpleName();
-        executors.put(name, toolObj);
-        for (String g : groups) {
-            groupIndex.computeIfAbsent(g, k -> new LinkedHashSet<>()).add(name);
+    // ==================== 注册 ====================
+
+    /**
+     * 注册单个工具实例（如 SimpleTool）
+     * 内部会扫描所有 @Tool 方法，为每个方法创建一个 DefaultToolExecutor
+     */
+    public ToolRegistry register(Object toolInstance, String... groups) {
+        rawToolInstances.add(toolInstance);
+
+        // 扫描该实例上所有带 @Tool 注解的方法
+        for (Method method : toolInstance.getClass().getDeclaredMethods()) {
+            if (!method.isAnnotationPresent(Tool.class)) {
+                continue;
+            }
+
+            String toolName = method.getName(); // 大模型看到的工具名
+
+            // 为每个 @Tool 方法创建一个独立的执行器
+            DefaultToolExecutor executor = new DefaultToolExecutor( method, (Method) toolInstance);
+            executors.put(toolName, executor);
+
+            // 建立分组索引
+            for (String g : groups) {
+                groupIndex.computeIfAbsent(g, k -> new LinkedHashSet<>()).add(toolName);
+            }
+
+            log.info("注册工具: {} -> {}.{}", toolName,
+                    toolInstance.getClass().getSimpleName(), method.getName());
         }
         return this;
     }
 
-    /** 批量注册（Spring 场景下自动扫描） */
-    public ToolRegistry registerAll(Collection<AiToolProvider> tools, String defaultGroup) {
-        tools.forEach(t -> register((DefaultToolExecutor) t, defaultGroup));
+    /**
+     * 批量注册（Spring 场景：注入所有实现了某接口的工具 Bean）
+     */
+    public ToolRegistry registerAll(Collection<?> toolBeans, String defaultGroup) {
+        toolBeans.forEach(bean -> register(bean, defaultGroup));
         return this;
     }
 
-    /** 按分组取工具实例 */
-    public List<DefaultToolExecutor> getByGroup(String group) {
-        Set<String> names = groupIndex.getOrDefault(group, Set.of());
-        return names.stream()
-                .map(executors::get)
-                .filter(Objects::nonNull)
-                .toList();
-    }
+    // ==================== 生成 Specs ====================
 
-    /** 取全部 */
-    public List<Object> getAll() {
-        return new ArrayList<>(executors.values());
-    }
-
-    /** 生成 ToolSpecification 列表（核心转换） */
-    public List<ToolSpecification> toSpecs(List<Object> tools) {
-        return tools.stream()
-                .flatMap(t -> ToolSpecifications.toolSpecificationsFrom(t.getClass()).stream())
-                .toList();
-    }
-
+    /**
+     * 生成全部工具的 ToolSpecification 列表
+     * 传给 ChatModel，让大模型知道有哪些工具可用
+     */
     public List<ToolSpecification> allSpecs() {
-        return executors.values().stream()
-                .flatMap(obj -> ToolSpecifications
-                        .toolSpecificationsFrom(obj).stream())
-                .toList();
+        return rawToolInstances.stream()
+                .flatMap(obj -> ToolSpecifications.toolSpecificationsFrom(obj).stream())
+                .collect(Collectors.toList());
     }
 
-    /** 核心执行：根据 LLM 请求调用工具（极简一行） */
+    /**
+     * 按分组生成 Specs（可选：不同场景暴露不同工具）
+     */
+    public List<ToolSpecification> specsByGroup(String group) {
+        Set<String> names = groupIndex.getOrDefault(group, Set.of());
+        // 过滤出属于该分组的工具实例，再生成 specs
+        // 简化处理：生成全部后按名称过滤
+        return allSpecs().stream()
+                .filter(spec -> names.contains(spec.name()))
+                .collect(Collectors.toList());
+    }
+
+    // ==================== 执行 ====================
+
+    /**
+     * 核心执行：根据大模型返回的 ToolExecutionRequest 调用对应工具
+     *
+     * 调用的是 ToolExecutor 接口的【公开方法】：
+     * String execute(ToolExecutionRequest request, Object memoryId)
+     */
     public String execute(ToolExecutionRequest request) {
-        String methodName = request.name();
-        DefaultToolExecutor executor = executors.get(methodName);
+        String toolName = request.name();
+        ToolExecutor executor = executors.get(toolName);
 
         if (executor == null) {
-            throw new IllegalArgumentException("未找到工具: " + methodName);
+            throw new IllegalArgumentException("未注册的工具: " + toolName);
         }
 
-        // 直接执行，自动完成 JSON 参数 -> Java 方法参数 的绑定
-     //   return executor.execute(request);
-        return "待实现";
+        // ★ 关键：调用 ToolExecutor 接口的公开方法，memoryId 传 null 即可
+        return executor.execute(request, null);
     }
 
-    /** ★ 安全执行（推荐）：捕获异常，返回友好错误信息给 LLM */
+    /**
+     * 安全执行（推荐在 ReAct 循环中使用）
+     * 捕获一切异常，返回错误描述给大模型，避免流程中断
+     */
     public String executeSafely(ToolExecutionRequest request) {
         try {
-            return execute(request);
+            log.info("执行工具: {} | 参数: {}", request.name(), request.arguments());
+            String result = execute(request);
+            log.info("工具返回: {}", result);
+            return result;
         } catch (Exception e) {
             log.error("工具执行异常: {}", request.name(), e);
-            // 返回错误描述，LLM 会看懂并告知用户，避免流程崩溃
-            return "调用工具失败，原因：" + e.getMessage();
+            return "工具 [" + request.name() + "] 执行失败，原因：" + e.getMessage();
         }
+    }
+
+    // ==================== 查询 ====================
+
+    public boolean hasTool(String name) {
+        return executors.containsKey(name);
+    }
+
+    public Set<String> allToolNames() {
+        return Collections.unmodifiableSet(executors.keySet());
     }
 }
