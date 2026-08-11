@@ -77,6 +77,7 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
         // 使用 预设知识库 进行搜索
         List<dev.langchain4j.rag.content.Content> list= knowledgeBaseRagService.searchRelevantTexts(request.getText(),5,0.7);
 
+        //系统信息
         String systemPrompt= buildSystemPromptWithContent(list);
         SystemMessage systemMessage =SystemMessage.from(systemPrompt);
 

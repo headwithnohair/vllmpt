@@ -4,8 +4,10 @@ import dev.langchain4j.service.tool.DefaultToolExecutor;
 import org.albedo.vllmpt.module.chat.tool.AiTool;
 import org.albedo.vllmpt.module.chat.tool.AiToolProvider;
 import org.albedo.vllmpt.module.chat.tool.ToolRegistry;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.AnnotationUtils;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -21,12 +23,16 @@ public class ToolAutoConfig {
     public ToolRegistry toolRegistry(List<AiToolProvider> allBeans) {
         ToolRegistry registry = new ToolRegistry();
 
-        allBeans.stream()
-                .filter(b -> b.getClass().isAnnotationPresent(AiTool.class))
-                .forEach(bean -> {
-                    AiTool meta = bean.getClass().getAnnotation(AiTool.class);
-                    registry.register(bean, meta.groups());
-                });
+
+        allBeans.forEach(bean -> {
+            // ★ 修改点：获取真实的 Target Class，防止代理类导致注解丢失
+            Class<?> targetClass = AopUtils.getTargetClass(bean);
+            AiTool meta = AnnotationUtils.findAnnotation(targetClass, AiTool.class);
+
+            if (meta != null) {
+                registry.register(bean, meta.groups());
+            }
+        });
         return registry;
     }
 }

@@ -7,6 +7,7 @@ import dev.langchain4j.agent.tool.ToolSpecifications;
 import dev.langchain4j.service.tool.DefaultToolExecutor;
 import dev.langchain4j.service.tool.ToolExecutor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.ClassUtils;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -43,17 +44,20 @@ public class ToolRegistry {
      */
     public ToolRegistry register(Object toolInstance, String... groups) {
         rawToolInstances.add(toolInstance);
-
+        Class<?> targetClass = ClassUtils.getUserClass(toolInstance.getClass());
         // 扫描该实例上所有带 @Tool 注解的方法
-        for (Method method : toolInstance.getClass().getDeclaredMethods()) {
+        // 扫描真实类上的方法
+        for (Method method : targetClass.getDeclaredMethods()) {
             if (!method.isAnnotationPresent(Tool.class)) {
                 continue;
             }
 
-            String toolName = method.getName(); // 大模型看到的工具名
+            String toolName = method.getName();
 
-            // 为每个 @Tool 方法创建一个独立的执行器
-            DefaultToolExecutor executor = new DefaultToolExecutor( method, (Method) toolInstance);
+            // 注意：这里传入的 toolInstance 依然是 Spring 注入的代理对象，
+            // 但 method 是真实类的方法。CGLIB 代理是真实类的子类，
+            // 所以 method.invoke(toolInstance, args) 是可以正常执行的。
+            DefaultToolExecutor executor = new DefaultToolExecutor(toolInstance, method);
             executors.put(toolName, executor);
 
             // 建立分组索引

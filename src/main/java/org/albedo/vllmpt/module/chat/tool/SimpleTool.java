@@ -25,4 +25,9 @@ public class SimpleTool   implements AiToolProvider  {
         log.info("getWeather 调用了  {}",place);
         return "晴天26度微风湿度50%适合出行";
     }
+
+
+    //补充一个重新调用知识库的工具,方便ai进行对问题颗粒度提升
+
+    //附加 一个回复方案,框架,任务标准拆解,知识库
 }
