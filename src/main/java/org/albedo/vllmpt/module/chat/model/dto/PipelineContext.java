@@ -13,5 +13,5 @@ public class PipelineContext<T> {
         this.interrupted = true;
         this.interruptReason = reason;
     }
-    // getters/setters...
+
 }
