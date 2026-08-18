@@ -9,7 +9,7 @@ import java.util.Map;
 
 @Data
 @Builder
-public class PipelineContext {
+public class ModelPipelineContext {
     private final String modelId;          // 如 "gpt-4o", "qwen-max"
     private final int maxContextTokens;    // 模型上限，如 128000
     private int reservedOutputTokens;      // 预留给生成的 token，如 4096
