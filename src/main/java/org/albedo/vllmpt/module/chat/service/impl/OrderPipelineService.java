@@ -1,24 +1,26 @@
 package org.albedo.vllmpt.module.chat.service.impl;
 
+import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
+import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
+import org.albedo.vllmpt.module.order.stages.Test2Stage;
+import org.albedo.vllmpt.module.order.stages.TestStage;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 
-@Service
+@Configuration
 public class OrderPipelineService {
 
+    @Bean("chatPipeline")
+    public ChatPipeline<ChatPipelineContext> chatPipeline(
+            TestStage testStage,
+            Test2Stage test2Stage
 
-//    Pipeline<Order> pipeline = new Pipeline<Order>()
-//            .addStage(validation)
-//            .addStage(riskCheck)
-//            .addStage(inventory)
-//            .addStage(pricing)
-//            .addStage(persist)
-//            .addStage(notify);
-//
-//    PipelineContext<Order> ctx = pipeline.execute(order);
-//
-//        if (ctx.isInterrupted()) {
-//        return OrderResult.fail(ctx.getInterruptReason());
-//    }
-//        return OrderResult.success(ctx.getData());
-//}
+    ) {
+        return ChatPipeline.<ChatPipelineContext>builder("chat-main")
+                .addStage(testStage)      // 参数校验
+                .addStage(test2Stage)
+                .build();
+    }
 }
+

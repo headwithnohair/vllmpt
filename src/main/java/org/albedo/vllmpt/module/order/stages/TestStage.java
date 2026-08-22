@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class testStage implements ChatPipelineStage<ChatPipelineContext> {
+public class TestStage implements ChatPipelineStage<ChatPipelineContext> {
 
 
     @Override
