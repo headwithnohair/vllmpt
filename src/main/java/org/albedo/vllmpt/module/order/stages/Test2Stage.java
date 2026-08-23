@@ -15,6 +15,7 @@ public class Test2Stage implements ChatPipelineStage<ChatPipelineContext> {
     public void execute(ChatPipelineContext context) {
 
         log.info("执行 execute");
+        context.setAttribute("response","opdoapsdoapw");
     }
 
     @Override

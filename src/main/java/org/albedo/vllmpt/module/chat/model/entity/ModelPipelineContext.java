@@ -2,6 +2,7 @@ package org.albedo.vllmpt.module.chat.model.entity;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +27,6 @@ public class ModelPipelineContext {
 
     // 审计日志
     private final List<StageAudit> auditLog = new ArrayList<>();
-
     public int availableTokens() {
         return maxContextTokens - reservedOutputTokens - currentTokenCount;
     }

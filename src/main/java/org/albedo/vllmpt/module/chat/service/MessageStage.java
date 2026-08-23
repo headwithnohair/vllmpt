@@ -2,7 +2,8 @@ package org.albedo.vllmpt.module.chat.service;
 
 
 import dev.langchain4j.data.message.ChatMessage;
-import org.albedo.vllmpt.module.chat.model.entity.PipelineContext;
+import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
+
 
 import java.util.List;
 
@@ -22,7 +23,7 @@ public interface MessageStage {
     default int order() { return 100; }
 
     /** 是否跳过此阶段（动态开关） */
-    default boolean shouldSkip(PipelineContext context) { return false; }
+    default boolean shouldSkip(ChatPipelineContext context) { return false; }
 
     /**
      * 核心处理逻辑
@@ -30,5 +31,5 @@ public interface MessageStage {
      * @param context  流水线上下文（可读写元数据）
      * @return 处理后的新消息列表
      */
-    List<ChatMessage> process(List<ChatMessage> messages, PipelineContext context);
+    List<ChatMessage> process(List<ChatMessage> messages, ChatPipelineContext context);
 }
