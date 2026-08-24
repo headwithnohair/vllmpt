@@ -2,11 +2,10 @@ package org.albedo.vllmpt.module.chat.service.impl;
 
 import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
-import org.albedo.vllmpt.module.order.stages.Test2Stage;
-import org.albedo.vllmpt.module.order.stages.TestStage;
+import org.albedo.vllmpt.module.chat.order.stages.Test2Stage;
+import org.albedo.vllmpt.module.chat.order.stages.TestStage;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.stereotype.Service;
 
 @Configuration
 public class OrderPipelineService {

@@ -1,4 +1,4 @@
-package org.albedo.vllmpt.module.order.stages;
+package org.albedo.vllmpt.module.chat.order.stages;
 
 
 import lombok.extern.slf4j.Slf4j;
@@ -8,13 +8,14 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class TestStage implements ChatPipelineStage<ChatPipelineContext> {
+public class Test2Stage implements ChatPipelineStage<ChatPipelineContext> {
 
 
     @Override
     public void execute(ChatPipelineContext context) {
 
         log.info("执行 execute");
+        context.setAttribute("response","opdoapsdoapw");
     }
 
     @Override
