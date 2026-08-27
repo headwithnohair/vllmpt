@@ -28,8 +28,7 @@ public class ChatMemoryStage implements ChatPipelineStage<ChatPipelineContext> {
         // 获取记忆
         String sessionId = context.getAttribute("sessionId").toString();
         ChatMemory memory = memoryProvider.get(sessionId);
-
-        context.setAttribute("memory",memory);
+        context.setRawChatMemory(memory);
     }
 
     @Override

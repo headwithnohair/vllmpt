@@ -33,6 +33,8 @@ public class ChatPiplineController {
         ctx.setAttribute("request", mpc);
         ctx.setAttribute("modelId", mpc.getModelName());
         ctx.setAttribute("sessionId", mpc.getSessionId());
+        ctx.setAttribute("attachments", mpc.getAttachments());
+        ctx.setAttribute("text", mpc.getText());
         executor.execute(chatPipeline, ctx);
         if (ctx.isInterrupted()) {
             return Result.error(505,ctx.getInterruptReason());
@@ -40,3 +42,4 @@ public class ChatPiplineController {
         return  Result.success(ctx.getAttribute("response").toString());
     }
 }
+
