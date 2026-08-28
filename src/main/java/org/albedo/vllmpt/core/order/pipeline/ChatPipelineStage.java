@@ -18,6 +18,7 @@ public interface ChatPipelineStage<C extends ChatPipelineContext> {
 
     /** 异常回调 */
     default void onError(C context, Throwable e) {
+
         throw new RuntimeException("Stage [" + name() + "] failed", e);
     }
 }

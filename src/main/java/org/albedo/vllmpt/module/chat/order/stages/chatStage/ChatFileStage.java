@@ -29,11 +29,9 @@ public class ChatFileStage implements ChatPipelineStage<ChatPipelineContext> {
     public void execute(ChatPipelineContext context) {
 
         String sessionId =context.getAttribute("sessionId").toString();
-        List<Attachment> rqs = (List<Attachment>) context.getAttribute("attachments");
+        List<Attachment> rqs =context.getAttachments();
         String text = (context.getAttribute("text")).toString();
-//        String requestText =;
         List<Content> currentContents = new ArrayList<>();
-        List<ChatMessage> allMessages = new ArrayList<>();
 
 
         MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, text,rqs);
@@ -42,6 +40,7 @@ public class ChatFileStage implements ChatPipelineStage<ChatPipelineContext> {
         currentContents.add(TextContent.from(resolveResult.memoryText));
         currentContents.addAll(resolveResult.contentsForModel);
         UserMessage currentUserMsg = UserMessage.from(currentContents);
+        context.setUserMessage(currentUserMsg);
     }
 
     @Override

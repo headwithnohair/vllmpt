@@ -8,6 +8,7 @@ import java.util.List;
  * 一条管道 = 一组有序 Stage
  * 每条业务线构建自己的 ChatPipeline 实例
  */
+
 public class ChatPipeline<C extends ChatPipelineContext> {
 
     private final String name;
