@@ -1,5 +1,6 @@
 package org.albedo.vllmpt.core.order.pipeline;
 
+import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import lombok.Data;
@@ -19,6 +20,7 @@ public class ChatPipelineContext<T> implements  PipelineContext {
     private ChatMemory rawChatMemory;
     private List<Attachment> attachments=new ArrayList<>();
     private UserMessage userMessage;
+    private SystemMessage systemMessage;
     public void interrupt(String reason) {
         this.interrupted = true;
         this.interruptReason = reason;
