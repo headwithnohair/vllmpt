@@ -1,7 +1,5 @@
 package org.albedo.vllmpt.module.chat.order.stages.chatStage;
 
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.Content;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import lombok.extern.slf4j.Slf4j;
@@ -9,9 +7,6 @@ import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineStage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Slf4j
 @Component

@@ -25,6 +25,106 @@
 
 
 
+方案一：换一个“更贴合 AI 痛点”的场景
+新场景名：基于 ZSet 的“单用户并发推理任务数”限制（Concurrency Control for LLM Inference）
+业务背景：大模型推理（尤其是 72B 级别）极其消耗 GPU 算力。如果不对单用户的并发请求数做限制，恶意用户或写错代码的客户端可能会同时发起 100 个 SSE 流式对话，瞬间打满 GPU 显存或导致队列严重拥堵，影响其他正常用户。
+核心需求：限制同一个 userId 同一时间最多只能有 N 个（如 3 个） 正在进行的推理任务。
+为什么比 Token 扣减好？
+业务极简：不需要计算具体的 Token 数量，只需要管理请求的“生命周期”（开始与结束）。
+痛点极真：在 AI infra 领域，GPU 资源的并发隔离是绝对的 P0 级痛点，面试官一听就觉得你很懂 AI 后端的特殊性。
+技术实现（ZSet + Lua）：
+Key：ai:concurrent:{userId}
+ZSet 结构：member 是 requestId（或 sessionId），score 是请求发起的时间戳。
+Lua 脚本逻辑：
+ZREMRANGEBYSCORE：清理掉超过设定时间（如 60 秒）的过期请求（防止 SSE 异常断开导致死锁）。
+ZCARD：统计当前窗口内的活跃请求数。
+判断：如果 >= limit，返回 0（拒绝，提示“您的并发请求过多”）；如果 < limit，执行 ZADD 加入新请求，并 EXPIRE 设置兜底过期时间，返回 1（放行）。
+释放：在 SSE 的 onComplete 或 onError 回调中，执行 ZREM 移除该 requestId。
+场景 2：SSE 流式会话的并发互斥与“看门狗”机制
+业务背景：同一个 sessionId 下，如果用户快速连续点击两次“发送”，会导致两个 SSE 流同时修改 Redis 中的记忆上下文，造成上下文错乱。
+核心需求：
+在对话 Pipeline 入口加分布式锁，同一 Session 同时只能处理一个请求。
+考虑到 LLM 推理可能长达 30 秒，锁的过期时间必须动态续期（防死锁）。
+技术考点：
+Redisson 看门狗 (Watchdog) 机制的底层原理（Redis 中如何通过 Hash 结构记录锁的重入次数和线程 ID）。
+如果不依赖 Redisson，如何用原生 Redis 命令 (SET NX PX + Lua) 手写一个带续期功能的分布式锁。
+Python 迁移映射：Python 生态中常用 redlock 或 aioredlock 库，理解其底层逻辑有助于你在 Python 中处理异步并发冲突。
+场景 3：语义缓存 (Semantic Cache) 的 Redis 实现
+业务背景：文档 10.2 提到的远期规划。用户问“公司报销流程是什么？”和“请问报销怎么走？”，语义相同，直接返回缓存结果，节省大模型 Token。
+核心需求：
+将用户 Query 向量化后，在 Redis 中进行向量相似度检索。
+如果相似度 > 0.95，直接返回缓存的 AI 回答。
+技术考点：
+Redis Stack (RediSearch / Vector)：学习如何在 Redis 中创建 Vector Index，使用 KNN 查询。
+Python 迁移映射：Python 中常用 RedisVL 或 LangChain 的 RedisSemanticCache。
+二、 Elasticsearch 进阶场景：从“日志存储”到“复杂检索与多维分析”
+文档中 ES 目前主要用于日志存储。我们需要将其引入核心业务链路。
+场景 4：RAG 知识库的“混合检索” (Hybrid Search)
+业务背景：文档 4.3 中目前只用 Chroma 做向量检索。但向量检索对“精确关键词”（如产品型号 X-990A、特定人名）效果很差。
+核心需求：
+将文档分块后，同时写入 Chroma (向量) 和 ES (倒排索引)。
+查询时，同时发起向量检索和 ES 的 BM25 全文检索。
+使用 RRF (Reciprocal Rank Fusion) 算法融合两路结果的得分，返回 Top-K。
+技术考点：
+ES 的 Function Score Query 和 BM25 算分原理。
+ES 的 Multi-search API 批量并发查询。
+Python 迁移映射：LlamaIndex 和 LangChain 都有现成的 HybridRetriever，但理解 ES 的 DSL (Domain Specific Language) 查询语法是必修课。
+场景 5：全链路对话日志的多维聚合与下钻分析
+业务背景：老板要看报表：上个月各模型的 Token 消耗总额、RAG 召回的平均耗时、各业务线（BizScene）的错误率。
+核心需求：
+设计 ES 的 Index Mapping（区分 keyword, text, date, nested 类型）。
+编写复杂的 DSL 聚合查询：按“业务线”分组 -> 按“模型”子分组 -> 计算 Token 总和与 P99 耗时。
+技术考点：
+Aggregations (聚合分析)：Terms Agg, Date Histogram, Metrics (Sum, Avg, Percentiles)。
+Pipeline Aggregations：在聚合结果之上再做二次计算（如计算移动平均）。
+Python 迁移映射：Python 中使用 elasticsearch-dsl 库可以像写 ORM 一样写 ES 查询，极大提升开发体验。
+三、 消息队列 (RabbitMQ) 进阶场景：从“简单异步”到“复杂状态机与可靠性”
+文档 10.3 规划了 MQ 用于文件解析。我们需要设计更健壮的架构。
+场景 6：百 MB 大文件 RAG 入库的“异步流水线与进度追踪”
+业务背景：用户上传 200MB 的 PDF，后端如果同步处理会超时。必须异步化，且前端需要看到“解析中(30%) -> 分块中(60%) -> 向量化中(90%) -> 完成”的进度。
+核心需求：
+设计 MQ 拓扑：file.parse.exchange (Direct) -> parse.queue -> embed.queue。
+消费者处理完一个阶段，将进度写入 Redis，并通过 WebSocket/SSE 推送给前端。
+如果向量化阶段失败（如 Chroma 宕机），消息进入死信队列 (DLQ)，并触发告警。
+技术考点：
+RabbitMQ 路由机制：Direct / Topic 交换机的使用。
+消息可靠性：Publisher Confirm, 消费者 Manual ACK, 死信队列 (DLX) 配置。
+延迟队列：使用 rabbitmq_delayed_message_exchange 插件处理超时未响应的任务。
+Python 迁移映射：Python 中通常不直接写底层 AMQP 协议，而是使用 Celery (结合 Redis/RabbitMQ 作为 Broker) 或 aio-pika (异步原生客户端)。学习 Celery 的 Canvas (Chain, Chord, Group) 非常适合这个场景。
+场景 7：Agent 工具调用的异步 RPC 模式
+业务背景：ReAct 循环中，模型决定调用“生成月度报表”工具。这个工具需要查库、画图，耗时 1 分钟。不能阻塞主线程。
+核心需求：
+Agent 发起工具调用请求，放入 MQ，立即返回“处理中”。
+后台 Worker 执行完毕后，将结果放入 reply.queue。
+Agent 监听 reply.queue，收到结果后继续下一轮推理。
+技术考点：
+RPC 模式 (Reply Queue)：RabbitMQ 实现同步转异步的经典模式。
+Correlation ID：确保请求和响应正确匹配。
+四、 复杂 SQL 查询进阶场景：突破 CRUD，掌握关系型数据的高级玩法
+AI 项目虽然重 NoSQL，但用户、权限、账单、对话树等核心业务依然依赖 MySQL。
+场景 8：对话树 (DAG) 的存储与递归查询
+业务背景：文档附录 P1 提到的“对话树分支管理”。用户修改了第 3 轮对话，重新生成了第 4 轮。此时对话不再是线性链表，而是树形结构（DAG）。
+核心需求：
+设计表结构：chat_message(id, session_id, parent_id, content, model, created_at)。
+查询某条消息的所有祖先节点（用于组装当前上下文）。
+查询某个 Session 下的所有叶子节点（用于展示对话分支）。
+技术考点：
+递归查询 (Recursive CTE)：使用 WITH RECURSIVE 语法实现树形数据的向上/向下遍历。
+闭包表 (Closure Table) 或 路径枚举 设计模式对比。
+Python 迁移映射：Python 的 SQLAlchemy 2.0 对 CTE 和递归查询有非常好的原生支持。
+场景 9：多维度 Token 消耗账单与阶梯计费报表
+业务背景：财务需要出账单。不同模型单价不同，且用户有“每月前 10 万 Token 免费，超出部分 0.01元/千 Token”的阶梯计费规则。
+核心需求：
+按“用户 + 月份”分组，统计各模型的 Token 消耗量。
+计算每个用户的总费用（需处理阶梯计费逻辑）。
+生成排行榜（Top 10 消耗用户）。
+技术考点：
+窗口函数 (Window Functions)：SUM() OVER(PARTITION BY ...)，ROW_NUMBER()。
+高级分组：GROUP BY ... WITH ROLLUP (生成小计和总计行)。
+复杂 CASE WHEN 结合子查询实现阶梯计费逻辑。
+Python 迁移映射：虽然 Python 有 Pandas 做数据分析，但在高并发 Web 后端，掌握 SQLAlchemy 的复杂 SQL 构建或手写原生 SQL 依然是高级后端的标志。
+
+
 
 补充:
 一个典型的通义千问（Qwen）网页端或客户端向后端发送的对话请求参数（Request Payload）

@@ -7,8 +7,6 @@ import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineExecutor;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
-import org.albedo.vllmpt.module.chat.model.entity.ModelPipelineContext;
-import org.albedo.vllmpt.module.chat.service.impl.OrderPipelineService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
