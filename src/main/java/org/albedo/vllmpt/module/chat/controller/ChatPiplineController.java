@@ -31,13 +31,17 @@ public class ChatPiplineController {
         ctx.setAttribute("request", mpc);
         ctx.setAttribute("modelId", mpc.getModelName());
         ctx.setAttribute("sessionId", mpc.getSessionId());
-        ctx.setAttribute("attachments", mpc.getAttachments());
+        ctx.setAttachments(mpc.getAttachments());
         ctx.setAttribute("text", mpc.getText());
         executor.execute(chatPipeline, ctx);
         if (ctx.isInterrupted()) {
             return Result.error(505,ctx.getInterruptReason());
         }
-        return  Result.success(ctx.getAttribute("response").toString());
+        Object response = ctx.getAttribute("response");
+        if (response == null) {
+            return Result.error(505, "流水线未产生响应");
+        }
+        return  Result.success(response.toString());
     }
 }
 

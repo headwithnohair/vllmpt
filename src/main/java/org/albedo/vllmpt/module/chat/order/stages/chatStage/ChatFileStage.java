@@ -1,6 +1,5 @@
 package org.albedo.vllmpt.module.chat.order.stages.chatStage;
 
-
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
@@ -15,6 +14,10 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 附件解析阶段 —— 解析多模态附件，生成模型用的 UserMessage 与写入记忆用的纯文本
+ * 对应 chatWithMultipleFiles 中的 contentResolver.resolve(...)
+ */
 @Slf4j
 @Component
 public class ChatFileStage implements ChatPipelineStage<ChatPipelineContext> {
@@ -22,37 +25,38 @@ public class ChatFileStage implements ChatPipelineStage<ChatPipelineContext> {
     @Autowired
     private MultimodalContentResolver contentResolver;
 
-
     @Override
     public void execute(ChatPipelineContext context) {
 
-        String sessionId =context.getAttribute("sessionId").toString();
-        List<Attachment> rqs =context.getAttachments();
-        String text = (context.getAttribute("text")).toString();
+        Object sessionIdObj = context.getAttribute("sessionId");
+        String sessionId = sessionIdObj == null ? null : sessionIdObj.toString();
+
+        Object textObj = context.getAttribute("text");
+        String text = textObj == null ? "" : textObj.toString();
+
+        List<Attachment> attachments = context.getAttachments();
+        if (attachments == null) {
+            attachments = List.of();
+        }
+
+        MultimodalContentResolver.ResolveResult resolveResult =
+                contentResolver.resolve(sessionId, text, attachments);
+
+        // 记忆用的纯文本（图片/文件会被替换为文字标签）
+        context.setMemoryText(resolveResult.memoryText);
+
+        // 模型用的多模态内容
         List<Content> currentContents = new ArrayList<>();
-
-
-        MultimodalContentResolver.ResolveResult resolveResult = contentResolver.resolve(sessionId, text,rqs);
-
-        //将记忆用的图片imageMessage替换为文字标签 放入list ,解析后的文件 也放入列表,对于模型不支持的文件,转换为文字Message后放入list
         currentContents.add(TextContent.from(resolveResult.memoryText));
         currentContents.addAll(resolveResult.contentsForModel);
-        UserMessage currentUserMsg = UserMessage.from(currentContents);
-        context.setUserMessage(currentUserMsg);
-    }
 
-    @Override
-    public String name() {
-        return ChatPipelineStage.super.name();
-    }
-
-    @Override
-    public boolean shouldExecute(ChatPipelineContext context) {
-        return ChatPipelineStage.super.shouldExecute(context);
+        context.setUserMessage(UserMessage.from(currentContents));
+        log.debug("附件解析完成，模型内容 {} 段", currentContents.size());
     }
 
     @Override
     public void onError(ChatPipelineContext context, Throwable e) {
-        ChatPipelineStage.super.onError(context, e);
+        log.error("附件解析失败", e);
+        context.interrupt("附件解析失败：" + e.getMessage());
     }
 }
