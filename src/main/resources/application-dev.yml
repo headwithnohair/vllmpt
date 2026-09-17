@@ -131,4 +131,14 @@ app:
     knowledge-base-collection: vllmpt_knowledge_base
     user-profile-collection: vllmpt_user_profiles
 
+# 单用户并发推理限制（Redis ZSet）
+ai:
+  concurrent:
+    # 单用户允许的最大并发推理任务数
+    limit: 3
+    # 活跃窗口（秒）：必须大于最慢一次推理的耗时，否则慢请求被清理会导致超卖
+    window-seconds: 300
+    # key 兜底过期时间（秒），建议留出窗口的 2 倍余量
+    key-ttl-seconds: 600
+
 # Spring Security 配置 - 开发环境关闭安全验证

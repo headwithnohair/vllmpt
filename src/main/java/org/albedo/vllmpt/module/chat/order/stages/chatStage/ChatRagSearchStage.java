@@ -29,8 +29,15 @@ public class ChatRagSearchStage implements ChatPipelineStage<ChatPipelineContext
     public void execute(ChatPipelineContext context) {
         String text = context.getAttribute("text") == null ? "" : context.getAttribute("text").toString();
 
-        List<Content> list = knowledgeBaseRagService.searchRelevantTexts(text, 5, 0.7);
-        log.debug("知识库命中 {} 条参考资料", list.size());
+        List<Content> list;
+        try {
+            list = knowledgeBaseRagService.searchRelevantTexts(text, 5, 0.7);
+            log.debug("知识库命中 {} 条参考资料", list.size());
+        } catch (Exception e) {
+            // 向量库/重排模型不可用（如网络异常）时降级，不能阻断整条对话链路
+            log.warn("知识库检索失败，降级为通用提示词：{}", e.getMessage());
+            list = List.of();
+        }
 
         context.setSystemMessage(SystemMessage.from(buildSystemPromptWithContent(list)));
     }
@@ -42,7 +49,7 @@ public class ChatRagSearchStage implements ChatPipelineStage<ChatPipelineContext
         return text != null && StringUtils.hasText(text.toString());
     }
 
-    /** 检索失败不应该阻断对话，降级为通用提示词 */
+    /** 检索失败不应该阻断对话，降级为通用提示词（异常已在 execute 内兜住，此处仅作兜底日志） */
     @Override
     public void onError(ChatPipelineContext context, Throwable e) {
         log.warn("知识库检索失败，降级为通用提示词", e);

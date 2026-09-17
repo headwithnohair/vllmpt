@@ -15,6 +15,17 @@ import java.util.Map;
 
 @Data
 public class ChatPipelineContext<T> implements  PipelineContext {
+
+    /**
+     * 流式输出通道的 attribute key。
+     * 值为 {@code java.util.function.Consumer<String>}，存在时表示本次走 SSE 流式，
+     * Stage 应逐 token 推送内容而非整段返回。
+     */
+    public static final String STREAM_TOKEN_CONSUMER = "streamTokenConsumer";
+
+    /** 本次推理请求唯一 ID 的 attribute key，用于释放并发额度（ZSet 的 member） */
+    public static final String REQUEST_ID = "requestId";
+
     private final Map<String, Object> attributes = new HashMap<>();
     private boolean interrupted = false;
     private String interruptReason;
@@ -30,6 +41,9 @@ public class ChatPipelineContext<T> implements  PipelineContext {
     private List<ChatMessage> allMessages = new ArrayList<>();
     /** 模型最终答复 */
     private AiMessage finalResult;
+
+    /** 本次推理请求的唯一 ID，用于释放并发额度（ZSet 的 member） */
+    private String requestId;
 
     /** 模型控制参数 */
     private String modelName;

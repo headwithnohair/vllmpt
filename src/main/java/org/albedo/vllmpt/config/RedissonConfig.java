@@ -54,6 +54,7 @@ public class RedissonConfig {
         String address = "redis://" + redisHost + ":" + redisPort;
         var singleServerConfig = config.useSingleServer()
                 .setAddress(address)
+                .setDatabase(redisDatabase)
                 .setConnectionPoolSize(maxActive)
                 .setConnectionMinimumIdleSize(minIdle);
         
