@@ -20,6 +20,7 @@ public class MultimodalChatRequest {
     /** 会话 ID */
     private String sessionId;
 
+    private String UserId;
     /** 用户输入的文本 */
     private String text;
 

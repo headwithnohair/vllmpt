@@ -66,10 +66,9 @@ public class ChatPiplineController {
         String requestId = UUID.randomUUID().toString();
         ctx.setAttribute(ChatPipelineContext.REQUEST_ID, requestId);
 
-        // TODO [步骤5-1] 在执行 pipeline 之前申请并发额度：
-        //   调用 concurrentLimitService.tryAcquire(userId, requestId)，
-        //   返回 false 时抛 BusinessException(CODE_TOO_MANY_CONCURRENT, "您的并发请求过多，请稍后重试")
-
+        boolean res = concurrentLimitService.tryAcquire(mpc.getUserId(),mpc.getSessionId());
+        if ( !res)
+            throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
         try {
             executor.execute(chatPipeline, ctx);
             if (ctx.isInterrupted()) {
@@ -81,8 +80,7 @@ public class ChatPiplineController {
             }
             return Result.success(response.toString());
         } finally {
-            // TODO [步骤5-2] 在这里释放额度：concurrentLimitService.release(userId, requestId)
-            //   注意必须在 finally 里，保证正常 / 中断 / 异常三条路径都释放
+            concurrentLimitService.release(mpc.getUserId(),mpc.getSessionId());
         }
     }
 
@@ -114,10 +112,9 @@ public class ChatPiplineController {
         String requestId = UUID.randomUUID().toString();
         ctx.setAttribute(ChatPipelineContext.REQUEST_ID, requestId);
 
-        // TODO [步骤6-1] 必须在 return sink.asFlux() 之前同步申请并发额度：
-        //   调用 concurrentLimitService.tryAcquire(userId, requestId)，
-        //   返回 false 时抛 BusinessException(CODE_TOO_MANY_CONCURRENT, "您的并发请求过多，请稍后重试")
-        //   —— 放到 runAsync 里面就晚了，那时 SSE 已经返回 200，只能推错误帧，无法返回 429
+        boolean res = concurrentLimitService.tryAcquire(mpc.getUserId(),mpc.getSessionId());
+        if ( !res)
+            throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
 
         // 注入流式通道：ChatAgentStage 检测到后改用 StreamingChatModel 逐 token 回调
         ctx.setAttribute(ChatPipelineContext.STREAM_TOKEN_CONSUMER,
@@ -136,7 +133,7 @@ public class ChatPiplineController {
             } catch (Exception e) {
                 sink.tryEmitError(e);
             } finally {
-                // TODO [步骤6-2] 在这里释放额度：concurrentLimitService.release(userId, requestId)
+                concurrentLimitService.release(mpc.getUserId(),mpc.getSessionId());
             }
         });
 
