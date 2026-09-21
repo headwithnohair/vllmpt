@@ -17,4 +17,16 @@ public final class RedisKey {
     public static String concurrent(String userId) {
         return CONCURRENT_PREFIX + userId;
     }
+
+    /** 会话互斥锁前缀 */
+    public static final String SESSION_LOCK_PREFIX = "ai:session:lock:";
+
+    /**
+     * 会话互斥锁：ai:session:lock:{sessionId}
+     * <p>
+     * 底层是 Redisson RLock 的 Hash 结构，field = {@code <clientUuid:threadId>}，value = 重入次数。
+     */
+    public static String sessionLock(String sessionId) {
+        return SESSION_LOCK_PREFIX + sessionId;
+    }
 }

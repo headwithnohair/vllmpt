@@ -50,7 +50,6 @@ ZCARD：统计当前窗口内的活跃请求数。
 技术考点：
 Redisson 看门狗 (Watchdog) 机制的底层原理（Redis 中如何通过 Hash 结构记录锁的重入次数和线程 ID）。
 如果不依赖 Redisson，如何用原生 Redis 命令 (SET NX PX + Lua) 手写一个带续期功能的分布式锁。
-Python 迁移映射：Python 生态中常用 redlock 或 aioredlock 库，理解其底层逻辑有助于你在 Python 中处理异步并发冲突。
 
 
 场景 3：语义缓存 (Semantic Cache) 的 Redis 实现

@@ -7,6 +7,7 @@ import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineExecutor;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
+import org.albedo.vllmpt.module.chat.service.ChatSessionLockService;
 import org.albedo.vllmpt.module.chat.service.ConcurrentLimitService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -45,6 +46,9 @@ public class ChatPiplineController {
     /** 并发额度不足的业务错误码 */
     private static final int CODE_TOO_MANY_CONCURRENT = 429;
 
+    /** 会话正在处理中（会话锁被占用）的业务错误码 */
+    private static final int CODE_SESSION_BUSY = 409;
+
     @Autowired @Qualifier("chatPipeline")
     private ChatPipeline<ChatPipelineContext> chatPipeline;
 
@@ -53,6 +57,9 @@ public class ChatPiplineController {
 
     @Autowired
     private ConcurrentLimitService concurrentLimitService;
+
+    @Autowired
+    private ChatSessionLockService sessionLockService;
 
     @PostMapping("/fack")
     public Result<String> testPipline(@RequestBody(required = false) MultimodalChatRequest mpc){
@@ -66,10 +73,22 @@ public class ChatPiplineController {
         String requestId = UUID.randomUUID().toString();
         ctx.setAttribute(ChatPipelineContext.REQUEST_ID, requestId);
 
-        boolean res = concurrentLimitService.tryAcquire(mpc.getUserId(),mpc.getSessionId());
+        // 会话锁用的原始 sessionId：不能用 resolveUserId 的 "anonymous" 兜底，
+        // 否则所有匿名请求会挤在同一个锁上互相阻塞（为空时 Service 内部会直接放行）
+        String sessionId = (String) ctx.getAttribute("sessionId");
+
+        boolean res = concurrentLimitService.tryAcquire(userId,sessionId);
         if ( !res)
             throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
+
+        boolean sessionLocked = false;
         try {
+            // TODO [步骤2-5] 尝试获取会话锁（同步接口在 Tomcat 线程内加锁，与下面的解锁天然同线程）：
+            //   sessionLocked = sessionLockService.tryLockSession(sessionId);
+            //   若返回 false，说明该会话已有请求在处理，抛：
+            //     new BusinessException(CODE_SESSION_BUSY, "该会话正在处理中，请稍候再试")
+            //   注意：throw 必须写在 try 内部，这样 finally 里的额度释放才能兜住这次失败
+
             executor.execute(chatPipeline, ctx);
             if (ctx.isInterrupted()) {
                 return Result.error(505, ctx.getInterruptReason());
@@ -80,7 +99,9 @@ public class ChatPiplineController {
             }
             return Result.success(response.toString());
         } finally {
-            concurrentLimitService.release(mpc.getUserId(),mpc.getSessionId());
+            // TODO [步骤2-6] 释放会话锁（只有真的拿到锁才需要释放）：
+            //   if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
+            concurrentLimitService.release(userId,sessionId);
         }
     }
 
@@ -112,7 +133,10 @@ public class ChatPiplineController {
         String requestId = UUID.randomUUID().toString();
         ctx.setAttribute(ChatPipelineContext.REQUEST_ID, requestId);
 
-        boolean res = concurrentLimitService.tryAcquire(mpc.getUserId(),mpc.getSessionId());
+        // 会话锁用的原始 sessionId（不能用 resolveUserId 的 anonymous 兜底，原因同 /fack）
+        String sessionId = (String) ctx.getAttribute("sessionId");
+
+        boolean res = concurrentLimitService.tryAcquire(userId,requestId);
         if ( !res)
             throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
 
@@ -121,7 +145,19 @@ public class ChatPiplineController {
                 (Consumer<String>) sink::tryEmitNext);
 
         CompletableFuture.runAsync(() -> {
+            boolean sessionLocked = false;
             try {
+                // TODO [步骤2-3] 必须在这里（runAsync 内部！）尝试获取会话锁：
+                //   sessionLocked = sessionLockService.tryLockSession(sessionId);
+                //   获取失败说明该会话已有请求在处理，推错误帧后收尾并 return：
+                //     sink.tryEmitNext("[ERROR] 该会话正在处理中，请稍候再试");
+                //     sink.tryEmitNext(DONE);
+                //     sink.tryEmitComplete();
+                //     return;
+                //   为什么必须放在 runAsync 内部：RLock 按 clientUuid:threadId 绑定持有者，
+                //   若在 Tomcat 线程加锁、到这里（ForkJoinPool 线程）解锁，
+                //   isHeldByCurrentThread() 会是 false，unlock() 抛 IllegalMonitorStateException
+
                 executor.execute(chatPipeline, ctx);
                 if (ctx.isInterrupted()) {
                     sink.tryEmitNext("[ERROR] " + ctx.getInterruptReason());
@@ -133,7 +169,10 @@ public class ChatPiplineController {
             } catch (Exception e) {
                 sink.tryEmitError(e);
             } finally {
-                concurrentLimitService.release(mpc.getUserId(),mpc.getSessionId());
+                // TODO [步骤2-4] 释放会话锁（只有真的拿到锁才需要释放）：
+                //   if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
+                // 下面这行是场景1 的额度释放，锁获取失败时也必须执行，不要删
+                concurrentLimitService.release(userId,sessionId);
             }
         });
 
