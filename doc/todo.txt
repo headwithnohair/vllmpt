@@ -40,6 +40,8 @@ ZREMRANGEBYSCORE：清理掉超过设定时间（如 60 秒）的过期请求（
 ZCARD：统计当前窗口内的活跃请求数。
 判断：如果 >= limit，返回 0（拒绝，提示“您的并发请求过多”）；如果 < limit，执行 ZADD 加入新请求，并 EXPIRE 设置兜底过期时间，返回 1（放行）。
 释放：在 SSE 的 onComplete 或 onError 回调中，执行 ZREM 移除该 requestId。
+
+
 场景 2：SSE 流式会话的并发互斥与“看门狗”机制
 业务背景：同一个 sessionId 下，如果用户快速连续点击两次“发送”，会导致两个 SSE 流同时修改 Redis 中的记忆上下文，造成上下文错乱。
 核心需求：
@@ -49,6 +51,8 @@ ZCARD：统计当前窗口内的活跃请求数。
 Redisson 看门狗 (Watchdog) 机制的底层原理（Redis 中如何通过 Hash 结构记录锁的重入次数和线程 ID）。
 如果不依赖 Redisson，如何用原生 Redis 命令 (SET NX PX + Lua) 手写一个带续期功能的分布式锁。
 Python 迁移映射：Python 生态中常用 redlock 或 aioredlock 库，理解其底层逻辑有助于你在 Python 中处理异步并发冲突。
+
+
 场景 3：语义缓存 (Semantic Cache) 的 Redis 实现
 业务背景：文档 10.2 提到的远期规划。用户问“公司报销流程是什么？”和“请问报销怎么走？”，语义相同，直接返回缓存结果，节省大模型 Token。
 核心需求：
@@ -57,6 +61,8 @@ Python 迁移映射：Python 生态中常用 redlock 或 aioredlock 库，理解
 技术考点：
 Redis Stack (RediSearch / Vector)：学习如何在 Redis 中创建 Vector Index，使用 KNN 查询。
 Python 迁移映射：Python 中常用 RedisVL 或 LangChain 的 RedisSemanticCache。
+
+
 二、 Elasticsearch 进阶场景：从“日志存储”到“复杂检索与多维分析”
 文档中 ES 目前主要用于日志存储。我们需要将其引入核心业务链路。
 场景 4：RAG 知识库的“混合检索” (Hybrid Search)
