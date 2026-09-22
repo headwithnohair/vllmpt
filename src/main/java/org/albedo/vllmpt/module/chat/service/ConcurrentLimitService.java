@@ -14,28 +14,15 @@ import java.util.List;
 
 /**
  * 基于 Redis ZSet + Lua 的单用户并发推理任务数限制。
- * <p>
  * 数据结构：key = {@code ai:concurrent:{userId}}，member = requestId，score = 发起时间戳(ms)。
  * 窗口内的 member 数量即为当前活跃的推理任务数。
- *
- * <h3>============ 练习说明 ============</h3>
- * 本类中标了 TODO 的 3 个位置需要你自己实现（对应计划文档的「步骤 3」）。
- * 实现前先把下面 4 个坑想清楚：
- * <ol>
- *   <li>{@code redissonClient.getScript(...)} 必须显式传 {@code StringCodec.INSTANCE}，
- *       否则会用全局 codec（默认 Kryo5）把字符串写成二进制，导致 ZCARD 永远是 0，限制永不触发。</li>
- *   <li>脚本的 ARGV 统一用 {@code String.valueOf(...)} 传，避免 codec 与类型差异。</li>
- *   <li>返回类型用 {@code RScript.ReturnType.LONG} —— Redisson 4.4.0 里没有 INTEGER，已改名为 LONG。</li>
- *   <li>{@code release} 必须吞掉异常并只打日志，否则会掩盖真正的业务异常。</li>
- * </ol>
  */
 @Slf4j
 @Service
 public class ConcurrentLimitService {
 
     /**
-     * 获取并发额度的 Lua 脚本 —— TODO [步骤3-1] 自己实现。
-     * <p>
+     * 获取并发额度的 Lua 脚本
      * 入参约定：
      * <pre>
      * KEYS[1] = ai:concurrent:{userId}
@@ -48,7 +35,6 @@ public class ConcurrentLimitService {
      *   <li>若 count &ge; limit，return 0（拒绝）</li>
      *   <li>否则 ZADD 入队（score=now，member=requestId）+ EXPIRE 设置兜底过期，return 1（放行）</li>
      * </ol>
-     * 提示：Lua 里所有参数都是字符串，数字比较前记得 {@code tonumber(ARGV[x])}。
      */
     private static final String LUA_ACQUIRE = """
             local key = KEYS[1]
@@ -60,8 +46,8 @@ public class ConcurrentLimitService {
             local  maxMs =nowMs -windowMs
    
    
-            redis.call("ZREMRANGEBYSCORE", key, "-inf","(" .. maxMs)
-            local allCount = redis.call('ZCARD', key)
+            redis.call("ZREMRANGEBYSCORE", key, "-inf","(" .. maxMs)   --删除分数小于 maxMs的元素
+            local allCount = redis.call('ZCARD', key)--统计当前窗口内的活跃请求数
             
             if  allCount>=limit  then
                 --请求满了 拒绝
@@ -69,8 +55,8 @@ public class ConcurrentLimitService {
             end
             
           
-             redis.call("ZADD",key,nowMs,requestId)
-             redis.call('EXPIRE', key, ttlSec)
+             redis.call("ZADD",key,nowMs,requestId) -- 添加
+             redis.call('EXPIRE', key, ttlSec)  -- 为当前key设置 过期时间 --如果长时间没有该userid的请求,则将其从redis缓存删除
             return 1
             """;
 
@@ -84,19 +70,6 @@ public class ConcurrentLimitService {
 
     /**
      * 尝试获取一个并发额度。
-     * <p>
-     * TODO [步骤3-2] 自己实现，要求一次 RTT 内原子完成「清理过期 member -&gt; 判限 -&gt; 入队 -&gt; 兜底过期」。
-     * <p>
-     * 实现要点：
-     * <ul>
-     *   <li>key 用 {@code RedisKey.concurrent(userId)}，now 用 {@code System.currentTimeMillis()}</li>
-     *   <li>{@code redissonClient.getScript(StringCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
-     *       LUA_ACQUIRE, RScript.ReturnType.LONG, List.of(key), ...)}</li>
-     *   <li>阈值取自 {@code props.getLimit()} / {@code props.getWindowSeconds()} / {@code props.getKeyTtlSeconds()}
-     *       （注意窗口要换算成毫秒）</li>
-     *   <li>返回 1L 表示拿到额度；否则打 warn 日志带 userId/requestId 并返回 false</li>
-     * </ul>
-     *
      * @return true 放行；false 并发已满
      */
     public boolean tryAcquire(String userId, String requestId) {
@@ -104,9 +77,9 @@ public class ConcurrentLimitService {
         // 1. 准备 Key
         String key = RedisKey.concurrent(userId);
 
-        // 2. 准备参数 (严格遵循注释要求：数字转 String，窗口转毫秒)
+        // 2. 准备参数
         long nowMs = System.currentTimeMillis();
-        long windowMs = props.getWindowSeconds() * 1000L; // 【修复】秒转毫秒
+        long windowMs = props.getWindowSeconds() * 1000L; // 秒转毫秒
         int limit = props.getLimit();
         int ttlSec = props.getKeyTtlSeconds();
         // 3. 执行 Lua 脚本
@@ -130,15 +103,6 @@ public class ConcurrentLimitService {
 
     /**
      * 释放并发额度。
-     * <p>
-     * TODO [步骤3-3] 自己实现：把本次的 requestId 从 ZSet 中 ZREM 掉。
-     * <p>
-     * 实现要点：
-     * <ul>
-     *   <li>{@code redissonClient.getScoredSortedSet(RedisKey.concurrent(userId), StringCodec.INSTANCE)}
-     *       然后 {@code remove(requestId)}，ZREM 天然幂等，重复调用安全</li>
-     *   <li>用 try/catch 包住，异常只打 error 日志并吞掉</li>
-     * </ul>
      */
     public void release(String userId, String requestId) {
 
@@ -157,8 +121,6 @@ public class ConcurrentLimitService {
 
     /**
      * 仅统计窗口内的活跃任务数，用于排查问题（不参与限流判断）。
-     * <p>
-     * 这个方法已经实现好了，可以直接用它来验证你的 tryAcquire / release 是否正确。
      */
     public int currentCount(String userId) {
         long minScore = System.currentTimeMillis() - props.getWindowSeconds() * 1000L;

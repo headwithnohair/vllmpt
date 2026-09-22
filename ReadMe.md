@@ -1,5 +1,5 @@
 秘塔 智能审批助手     
-技术栈:SpringBoot Minio Redis Chroma   
+技术栈:SpringBoot Minio Redis Chroma   langchain4j
 todo:  
 1.针对List<Content> 进行pipline改造,确保流程可审查,易更新  
 2.支持会话节点拆分,即保留当前上下文的同时新增一个对话  
