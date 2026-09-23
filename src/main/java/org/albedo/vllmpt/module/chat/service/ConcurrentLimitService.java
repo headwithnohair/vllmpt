@@ -3,14 +3,18 @@ package org.albedo.vllmpt.module.chat.service;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.redis.RedisKey;
 import org.albedo.vllmpt.module.chat.config.ConcurrentLimitProperties;
+import org.apache.commons.lang3.time.DateFormatUtils;
 import org.redisson.api.RScript;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 基于 Redis ZSet + Lua 的单用户并发推理任务数限制。
@@ -127,5 +131,35 @@ public class ConcurrentLimitService {
         RScoredSortedSet<String> zset =
                 redissonClient.getScoredSortedSet(RedisKey.concurrent(userId), StringCodec.INSTANCE);
         return zset.count(minScore, true, Double.POSITIVE_INFINITY, true);
+    }
+
+    private static final String Check_User_Token_Cut = """
+    local key   = KEYS[1]
+    local delta = tonumber(ARGV[1])
+    local ttl   = tonumber(ARGV[2])
+    
+    
+    local after  =redis.call("INCRBY",key,delta ) -- 添加token
+    if after == delta then
+        redis.call("Expire",key,ttl)
+    end
+    
+    return  after
+    """;
+    public boolean preAddToken(String userId,Long tokenCount){
+
+        String quota = RedisKey.quota(userId, DateFormatUtils.format(new Date(), "yyyyMMdd"));
+        boolean pp=redissonClient.getScript(StringCodec.INSTANCE).eval(
+                RScript.Mode.READ_WRITE,
+                Check_User_Token_Cut,
+                RScript.ReturnType.BOOLEAN,
+                List.of(quota),
+                tokenCount,
+                TimeUnit.DAYS.toSeconds(1)
+        );
+        //查询 是否超限
+
+
+        return pp;
     }
 }
