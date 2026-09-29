@@ -3,15 +3,14 @@ package org.albedo.vllmpt.module.chat.service;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.redis.RedisKey;
 import org.albedo.vllmpt.module.chat.config.ConcurrentLimitProperties;
+import org.albedo.vllmpt.module.quota.mapper.AiUserDailyTokenUsageMapper;
+import org.albedo.vllmpt.module.quota.model.entity.AiUserDailyTokenUsage;
 import org.apache.commons.lang3.time.DateFormatUtils;
 import org.redisson.api.RScript;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +65,7 @@ public class ConcurrentLimitService {
 
     private final RedissonClient redissonClient;
     private final ConcurrentLimitProperties props;
+    private AiUserDailyTokenUsageMapper aiUserDailyTokenUsageMapper;
 
     public ConcurrentLimitService(RedissonClient redissonClient, ConcurrentLimitProperties props) {
         this.redissonClient = redissonClient;
@@ -133,33 +133,43 @@ public class ConcurrentLimitService {
         return zset.count(minScore, true, Double.POSITIVE_INFINITY, true);
     }
 
-    private static final String Check_User_Token_Cut = """
+    private static final String Check_User_Token_ADD = """
     local key   = KEYS[1]
-    local delta = tonumber(ARGV[1])
-    local ttl   = tonumber(ARGV[2])
+    local estimateTokens = tonumber(ARGV[1])
+    local dailyLimit   = tonumber(ARGV[2])
+    local expireAtEpochSec = tonumber(ARGV[3])
     
-    
-    local after  =redis.call("INCRBY",key,delta ) -- 添加token
-    if after == delta then
-        redis.call("Expire",key,ttl)
+    local used  =tonumber(redis.call("GET",key ) or '0')
+    if (used + estimateTokens > dailyLimit) then
+       return -1
     end
     
-    return  after
+    local after = redis.call('INCRBY', key, estimateTokens)
+    
+    if after == estimateTokens then
+    -- 首次写入才设置过期，避免每个请求都刷新 TTL
+    redis.call('EXPIRE', key, expireAtEpochSec)
+    end
+    return after;
     """;
-    public boolean preAddToken(String userId,Long tokenCount){
+    public Long preAddToken(String userId,Long estimateTokens){
+
+
 
         String quota = RedisKey.quota(userId, DateFormatUtils.format(new Date(), "yyyyMMdd"));
-        boolean pp=redissonClient.getScript(StringCodec.INSTANCE).eval(
+        Long pp=redissonClient.getScript(StringCodec.INSTANCE).eval(
                 RScript.Mode.READ_WRITE,
-                Check_User_Token_Cut,
-                RScript.ReturnType.BOOLEAN,
+                Check_User_Token_ADD,
+                RScript.ReturnType.LONG,
                 List.of(quota),
-                tokenCount,
+                estimateTokens,
+                1000 * 10000L,
                 TimeUnit.DAYS.toSeconds(1)
         );
-        //查询 是否超限
+//        aiUserDailyTokenUsageMapper   这里1.理应来说是 执行redis,成功扣减的就按情况保存用来2. 但是似乎aiUserDailyTokenUsageMapper 不应当在此执行
 
-
-        return pp;
+        return pp ;
     }
+
+
 }
