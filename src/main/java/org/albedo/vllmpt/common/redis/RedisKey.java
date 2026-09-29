@@ -19,7 +19,7 @@ public final class RedisKey {
     /** 该模型当日累计 token。用于"这个用户的额度花在哪个模型上"   Hash */
     public static final String USAGE_PREFIX = "ai:usage:";
 
-    public static String USAGE(String userId,String yyyyMMdd) {
+    public static String Usage(String userId,String yyyyMMdd) {
 
         return  USAGE_PREFIX + userId + ':' + yyyyMMdd;
     }
@@ -27,7 +27,7 @@ public final class RedisKey {
     /** 日额度的缓存，避免每个请求都查 MySQL；配额变更时删掉这个键即可 */
     public static final String QUOTA_lIMIT_PREFIX = "ai:quota:limit:";
 
-    public static String quotalimit(String userId,String yyyyMMdd) {
+    public static String quotaLimit(String userId,String yyyyMMdd) {
 
         return  QUOTA_lIMIT_PREFIX + userId ;
     }
