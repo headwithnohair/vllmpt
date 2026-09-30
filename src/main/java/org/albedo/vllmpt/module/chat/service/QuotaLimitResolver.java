@@ -29,7 +29,7 @@ public class QuotaLimitResolver {
         this.redissonClient = redissonClient;
     }
 
-    private   String GET_USER_QUOTA_LIMIT = """
+    private final String GET_USER_QUOTA_LIMIT = """
             local  key = KEYS[1]
             
             local res = redis.call("GET",key)
