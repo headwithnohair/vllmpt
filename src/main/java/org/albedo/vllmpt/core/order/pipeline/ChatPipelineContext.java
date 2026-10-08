@@ -26,6 +26,14 @@ public class ChatPipelineContext<T> implements  PipelineContext {
     /** 本次推理请求唯一 ID 的 attribute key，用于释放并发额度（ZSet 的 member） */
     public static final String REQUEST_ID = "requestId";
 
+    /**
+     * 本次推理真实消耗 Token 的 attribute key。
+     * <p>
+     * 值为 {@code dev.langchain4j.model.output.TokenUsage}，由 {@code ChatAgentStage} 逐轮累加后写入，
+     * 供接入层在结算时读取。可能为 {@code null}（流式响应通常不带用量）。
+     */
+    public static final String TOKEN_USAGE = "tokenUsage";
+
     private final Map<String, Object> attributes = new HashMap<>();
     private boolean interrupted = false;
     private String interruptReason;

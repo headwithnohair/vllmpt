@@ -10,6 +10,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.output.TokenUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineStage;
@@ -71,6 +72,9 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
         List<ChatMessage> messages = new ArrayList<>(sourceMessages);
         AiMessage finalResult = null;
 
+        // 多轮工具调用的用量必须逐轮累加，最终写入上下文供结算使用
+        TokenUsage totalUsage = null;
+
         for (int step = 0; step < MAX_STEPS; step++) {
             log.info("第 {} 轮模型调用{}", step + 1, streamingModel != null ? "（流式）" : "");
 
@@ -79,9 +83,22 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
                     .messages(messages)
                     .build();
 
-            AiMessage aiMessage = streamingModel != null
+            // 先拿完整的 ChatResponse（而不是直接 .aiMessage()），否则读不到 tokenUsage
+            ChatResponse response = streamingModel != null
                     ? chatOnceStreaming(streamingModel, chatRequest, tokenConsumer)
-                    : chatModel.chat(chatRequest).aiMessage();
+                    : chatModel.chat(chatRequest);
+
+                TokenUsage roundUsage = response.tokenUsage();
+                if(roundUsage !=null)
+                {
+                    totalUsage = (totalUsage == null)
+                            ? roundUsage
+                            : TokenUsage.sum(totalUsage, roundUsage);
+                }
+
+
+
+            AiMessage aiMessage = response.aiMessage();
 
             // 没有工具调用请求 => 已是最终答复
             if (!aiMessage.hasToolExecutionRequests()) {
@@ -106,17 +123,23 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
             return;
         }
 
+
+           context.setAttribute(ChatPipelineContext.TOKEN_USAGE, totalUsage);
+
         context.setFinalResult(finalResult);
     }
 
     /**
      * 发起一次流式调用：逐 token 回调 tokenConsumer，并阻塞等待本轮完整结果。
      * 工具调用轮次通常不会产生正文 token，因此不会污染最终输出。
+     * <p>
+     * 返回 {@link ChatResponse} 而不是 {@link AiMessage}，因为用量信息
+     * （{@code response.tokenUsage()}）只挂在 ChatResponse 上。
      */
-    private AiMessage chatOnceStreaming(StreamingChatModel model,
-                                        ChatRequest request,
-                                        Consumer<String> tokenConsumer) {
-        CompletableFuture<AiMessage> future = new CompletableFuture<>();
+    private ChatResponse chatOnceStreaming(StreamingChatModel model,
+                                           ChatRequest request,
+                                           Consumer<String> tokenConsumer) {
+        CompletableFuture<ChatResponse> future = new CompletableFuture<>();
 
         model.chat(request, new StreamingChatResponseHandler() {
             @Override
@@ -126,7 +149,7 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
 
             @Override
             public void onCompleteResponse(ChatResponse response) {
-                future.complete(response.aiMessage());
+                future.complete(response);
             }
 
             @Override

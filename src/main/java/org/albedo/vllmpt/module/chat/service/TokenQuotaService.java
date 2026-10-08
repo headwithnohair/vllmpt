@@ -1,96 +1,293 @@
 package org.albedo.vllmpt.module.chat.service;
 
-
+import dev.langchain4j.model.output.TokenUsage;
+import lombok.extern.slf4j.Slf4j;
+import org.albedo.vllmpt.common.exception.BusinessException;
 import org.albedo.vllmpt.common.redis.RedisKey;
-
+import org.albedo.vllmpt.module.chat.config.TokenQuotaProperties;
+import org.albedo.vllmpt.module.chat.model.vo.QuotaLimit;
 import org.albedo.vllmpt.module.chat.model.vo.QuotaReservation;
-// ⚠️ 建议换掉：DateFormatUtils 来自 langchain4j / ES client 的"传递依赖"，能编译但不可靠；
-//    而且它用 JVM 默认时区，换成 java.time + 显式 ZoneId.of("Asia/Shanghai") 更稳妥
-import org.apache.commons.lang3.time.DateFormatUtils;
+import org.albedo.vllmpt.module.quota.mapper.AiUserDailyTokenUsageMapper;
+import org.redisson.api.RBucket;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
+/**
+ * <h3>每日 Token 配额服务（Redis 预扣 + 结算）</h3>
+ *
+ * <p>三阶段闭环：</p>
+ * <ol>
+ *   <li><b>预扣</b>（{@link #preDeduct}）：请求进入时按固定估算值原子占用额度，
+ *       超额直接拒绝（业务码 402），不消耗算力；</li>
+ *   <li><b>结算</b>（{@link #settle}）：模型返回后按真实用量「多退少补」，
+ *       同时按模型累计用量，并把结果落库；</li>
+ *   <li><b>兜底</b>：额度计数器与用量 Hash 都带 TTL，避免键无限堆积。</li>
+ * </ol>
+ *
+ * <p>Redis 键：</p>
+ * <ul>
+ *   <li>{@code ai:quota:{userId}:{yyyyMMdd}} —— String，当日已用（含预扣）token</li>
+ *   <li>{@code ai:usage:{userId}:{yyyyMMdd}} —— Hash，field = 模型名，value = 该模型当日累计 token</li>
+ *   <li>{@code ai:quota:limit:{userId}} —— String，日额度缓存，由 {@link QuotaLimitResolver} 维护</li>
+ * </ul>
+ *
+ * <p>⚠️ 作业说明：{@link #preDeduct}、{@link #settle} 与 {@link #SETTLE_LUA} 需要你自己补全，
+ * 对应练习指南的「步骤三 / 步骤四」。</p>
+ */
+@Slf4j
 @Service
 public class TokenQuotaService {
 
-    private  final RedissonClient redissonClient;
-    private  final QuotaLimitResolver quotaLimitResolver;
+    /** 额度不足的业务码：402 Payment Required，与「并发过多」的 429 区分开 */
+    public static final int CODE_TOKEN_QUOTA_EXCEEDED = 402;
 
-    public TokenQuotaService(RedissonClient redissonClient, QuotaLimitResolver quotaLimitResolver) {
+    /** 统计日期与 Redis 键统一使用东八区 */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+
+    private static final DateTimeFormatter STAT_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    private final RedissonClient redissonClient;
+    private final QuotaLimitResolver quotaLimitResolver;
+    private final TokenQuotaProperties tokenQuotaProperties;
+    private final AiUserDailyTokenUsageMapper aiUserDailyTokenUsageMapper;
+
+    public TokenQuotaService(RedissonClient redissonClient,
+                             QuotaLimitResolver quotaLimitResolver,
+                             TokenQuotaProperties tokenQuotaProperties,
+                             AiUserDailyTokenUsageMapper aiUserDailyTokenUsageMapper) {
         this.redissonClient = redissonClient;
-
         this.quotaLimitResolver = quotaLimitResolver;
+        this.tokenQuotaProperties = tokenQuotaProperties;
+        this.aiUserDailyTokenUsageMapper = aiUserDailyTokenUsageMapper;
     }
 
-    private static final String Check_User_Token_ADD = """
-    local key   = KEYS[1]
-    local estimateTokens = tonumber(ARGV[1])
-    local dailyLimit   = tonumber(ARGV[2])
-    local ttlSeconds = tonumber(ARGV[3])
-    
-    local used  =tonumber(redis.call("GET",key ) or '0')
-    if dailyLimit > 0 and used + estimateTokens > dailyLimit then
-       return -1
-    end
-    
-    local after = redis.call('INCRBY', key, estimateTokens)
-    
-    if redis.call('TTL', key) < 0 then
-        redis.call('EXPIRE', key, ttlSeconds)
-    end
-
-    return after;
-    """;
-
     /**
-     * ❌ 这个方法还没接线，有 4 个问题：
-     *   1) 日额度硬编码 1000*10000L —— 应该来自 quotaLimitResolver.resolve(userId).dailyLimit()
-     *   2) 构造函数里没有注入 QuotaLimitResolver，所以现在拿不到真实额度
-     *   3) 返回值应该是 QuotaReservation（而不是 Long）——
-     *      否则 settle 拿不到 quotaKey，跨零点时预扣与结算会落到两个不同的 key 上
-     *   4) estimate 是 Long 直接传，而其他地方都是 String.valueOf(...)，风格统一一下
-     */
-    public Long preDeduct(String userId,Long estimate){
-        // ⚠️ 每次都重新取"当天日期"。跨零点场景（23:59:59 预扣、00:00:01 结算）会写到两个 key 上，
-        //    建议只在这里取一次，然后把 quotaKey + statDate 一起装进 QuotaReservation 带出去，结算时复用
-        String quota = RedisKey.quota(userId, DateFormatUtils.format(new Date(), "yyyyMMdd"));
-        Long pp = redissonClient.getScript(StringCodec.INSTANCE).eval(
-                RScript.Mode.READ_WRITE,
-                Check_User_Token_ADD,
-                RScript.ReturnType.LONG,
-                List.of(quota),
-                estimate,
-                quotaLimitResolver.resolve(userId).dailyLimit(),
-                // ⚠️ 语义是"从此刻起 24 小时"，不是"到今天结束"。无害，但要知道区别
-                TimeUnit.DAYS.toSeconds(1)
-        );
-
-        // ⚠️ 返回 -1 表示超额，调用方必须同时判 null 和 < 0
-        return pp ;
-
-    }
-
-
-    /**
-     * ❌ 方法体还是空的，需要实现 4 步（2/3/4 必须一次原子完成，否则会出现"额度退了但用量没记"）：
-     *   1) diff = actualTokens - reservation.estimateTokens()   // 可能是负数，负数就是"退"
-     *   2) diff != 0 时 → INCRBY reservation.quotaKey() diff
-     *      ⚠️ 必须用 reservation 里存的 quotaKey，不要在这里重新算日期（跨零点会写歪）
-     *   3) → HINCRBY RedisKey.Usage(reservation.userId(), reservation.statDate()) modelName actualTokens
-     *      ❌ 但 QuotaReservation 现在没有 userId 字段，这一步拼不出 key，需要先给它补上
-     *   4) → if TTL usageKey < 0 then EXPIRE usageKey ttlSeconds
+     * 预扣脚本：一次 RTT 内完成「取当前值 → 判限 → 累加 → 设置兜底过期」。
      * <p>
-     * ⚠️ 重要：差额回补与 enabled 无关。
-     *    不管限制不限制，Lua 里都执行了 INCRBY estimate，所以两种情况都必须回补，
-     *    否则那个计数器会越来越虚高。enabled 只影响 Lua 里的判限，不影响结算。
+     * KEYS[1] = {@code ai:quota:{userId}:{yyyyMMdd}}<br>
+     * ARGV[1] = 本次预扣的估算值<br>
+     * ARGV[2] = 日额度；&lt;= 0 表示不限制<br>
+     * ARGV[3] = 兜底过期秒数<br>
+     * 返回：累加后的已用值；返回 {@code -1} 表示超额
      */
-    public void settle(QuotaReservation reservation, long actualTokens, String modelName){
-  // 没告诉我要实现什么
+    private static final String PRE_DEDUCT_LUA = """
+            local key = KEYS[1]
+            local estimateTokens = tonumber(ARGV[1])
+            local dailyLimit = tonumber(ARGV[2])
+            local ttlSeconds = tonumber(ARGV[3])
+
+            local used = tonumber(redis.call('GET', key) or '0')
+            if dailyLimit > 0 and used + estimateTokens > dailyLimit then
+                return -1
+            end
+
+            local after = redis.call('INCRBY', key, estimateTokens)
+
+            if redis.call('TTL', key) < 0 then
+                redis.call('EXPIRE', key, ttlSeconds)
+            end
+
+            return after
+            """;
+
+    /**
+     * 结算脚本：一次原子完成「差额回补 + 分模型累计 + 兜底过期」。
+     * <p>
+     * 三件事写在一个脚本里，是为了避免出现「额度退了但用量没记」的中间态。
+     *
+     * <pre>
+     * KEYS[1] = ai:quota:{userId}:{yyyyMMdd}   当日额度计数器
+     * KEYS[2] = ai:usage:{userId}:{yyyyMMdd}   分模型用量 Hash
+     * ARGV[1] = diff = actual - estimate       （可为负，负数即「退」）
+     * ARGV[2] = modelName
+     * ARGV[3] = actualTokens
+     * ARGV[4] = ttlSeconds
+     * 返回：固定 1
+     * </pre>
+     */
+    private static final String SETTLE_LUA = """
+            local quotaKey= KEYS[1]
+            local usageKey= KEYS[2]
+            local diff =       ARGV[1]
+            local modelName =  ARGV[2]
+            local actualTokens =  ARGV[3]
+            local ttlSeconds =  ARGV[4]
+            local res1
+            local res2
+            if diff ~= 0 then
+                res1=redis.call("INCRBY",quotaKey,diff)
+                local after = tonumber(redis.call("GET", quotaKey))
+                if after and after < 0 then
+                    redis.call("SET", quotaKey, 0)
+                    redis.call("EXPIRE", quotaKey, ttlSeconds)
+                end
+            end
+            redis.call("HINCRBY",usageKey,modelName,actualTokens)
+            
+            if redis.call("TTL", usageKey) < 0 then
+                        redis.call("EXPIRE", usageKey, ttlSeconds)
+            end
+            return 1
+            
+            """;
+
+    /**
+     * 预扣当日额度。
+     *
+     * <p>成功返回一份「凭证」，结算时必须用凭证里的键，不能重新计算日期 ——
+     * 否则 23:59:59 预扣、00:00:01 结算的请求会把差额退到第二天的计数器上。</p>
+     *
+     * @param userId   Redis 键里的用户标识（与并发限制共用同一套标识）
+     * @param estimate 本次预扣的估算值
+     * @return 预扣凭证
+     * @throws BusinessException 额度不足时抛出，业务码 {@link #CODE_TOKEN_QUOTA_EXCEEDED}
+     */
+    public QuotaReservation preDeduct(String userId, long estimate) {
+               String statDate = LocalDate.now(ZONE).format(STAT_DATE_FORMAT);
+               String quotaKey = RedisKey.quota(userId, statDate);
+               QuotaLimit limit = quotaLimitResolver.resolve(userId);
+               long dailyLimitArg = limit.enabled() ? limit.dailyLimit() : -1L;
+               Long after = redissonClient.getScript(StringCodec.INSTANCE).eval(
+                   RScript.Mode.READ_WRITE,
+                   PRE_DEDUCT_LUA,
+                   RScript.ReturnType.LONG,
+                   List.of(quotaKey),
+                   String.valueOf(estimate),
+                   String.valueOf(dailyLimitArg),
+                   String.valueOf(tokenQuotaProperties.getCounterTtlSeconds()));
+
+                if(after ==null || after <0){
+                    log.warn("CODE_TOKEN_QUOTA_EXCEEDED,userId:{},estimate:{},dailyLimitArg:{}",userId,estimate,dailyLimitArg);
+                    throw new BusinessException(CODE_TOKEN_QUOTA_EXCEEDED, "今日 Token 额度已用完，请明天再试");
+                }
+               return new QuotaReservation(userId, quotaKey, statDate, estimate, limit.enabled());
+    }
+
+    /**
+     * 结算：按真实用量多退少补，按模型累计用量，并把结果    落库。
+     *
+     * <p><b>整个方法体必须包在 try/catch 里，catch 只打日志、绝不向外抛。</b>
+     * 它运行在接入层的 {@code finally} 中，一旦抛出，后面的「释放并发额度」就不会执行。</p>
+     *
+     * @param reservation 预扣凭证；为 {@code null} 表示预扣没成功，直接返回
+     * @param usage       模型返回的用量；可能为 {@code null}（流式响应通常不带用量）
+     * @param modelName   模型名，用于分模型累计与落库（表里 {@code model_name} 是唯一键的一部分，不能为 null）
+     */
+    public void settle(QuotaReservation reservation, TokenUsage usage, String modelName) {
+        // ============ TODO [步骤4-2] ============
+        //  整体结构（先想清楚再动手）：
+        //
+        //   if (reservation == null) { return; }
+        //   try {
+        //       ... 下面 1) ~ 3)
+        //   } catch (Exception e) {
+        //       log.error(...);            // 只打日志，不要 rethrow
+        //   }
+        //
+        //  1) 计算真实用量（取不到就按估算值计费，差额正好为 0，不会留下虚高的计数器）：
+        //       long actual = (usage != null && usage.totalTokenCount() != null)
+        //               ? usage.totalTokenCount()
+        //               : reservation.estimateTokens();
+        //     走兜底分支时打一条 warn，并把 usage 是否为 null 也带上 —— 流式响应大概率走这里
+        //
+        //  2) 执行结算脚本（一次原子完成三件事）：
+        //       long diff = actual - reservation.estimateTokens();
+        //       redissonClient.getScript(StringCodec.INSTANCE).eval(
+        //           RScript.Mode.READ_WRITE,
+        //           SETTLE_LUA,
+        //           RScript.ReturnType.LONG,
+        //           List.of(reservation.quotaKey(),
+        //                   RedisKey.usage(reservation.userId(), reservation.statDate())),
+        //           String.valueOf(diff),
+        //           modelName,
+        //           String.valueOf(actual),
+        //           String.valueOf(tokenQuotaProperties.getCounterTtlSeconds()));
+        //     ⚠️ KEYS[1] 必须用 reservation.quotaKey()，不要在这里重新算日期（跨零点会写歪）
+        //     ⚠️ 差额回补与「是否限制额度」无关：不限制时脚本里也执行了 INCRBY 预扣，
+        //        所以两种情况都要回补，否则计数器会越来越虚高
+        //
+        //  3) 落库：调用下面已经留好的 persistDailyUsage(reservation, usage, modelName, actual)
+        //     它负责把本次用量累加写进 ai_user_daily_token_usage（方法在步骤五里配套实现）
+        // ========================================
+    }
+
+    /**
+     * 把本次用量累加落库到 {@code ai_user_daily_token_usage}。
+     *
+     * <p>由 {@link #settle} 调用，异常由 settle 统一捕获，这里不用再包 try/catch。</p>
+     *
+     * @param reservation 预扣凭证，提供 userId 与 statDate
+     * @param usage       模型用量；为 {@code null} 时直接跳过落库（没拿到用量就不要写不准的行）
+     * @param modelName   模型名
+     * @param actual      本次真实消耗（已由 settle 兜底算好）
+     */
+    private void persistDailyUsage(QuotaReservation reservation, TokenUsage usage,
+                                   String modelName, long actual) {
+        // ============ TODO [步骤4-3] ============
+        //   1) usage == null 直接 return（没拿到用量就不落库）
+        //   2) reservation.userId() 是 String，而表里 user_id 是 BIGINT，需要转换：
+        //        Long dbUserId = Long.parseLong(reservation.userId());
+        //      解析失败（anonymous、sessionId 这类非数字标识）就 return，
+        //      打一条 debug 即可 —— 这不是错误，只是这些标识本来就没有对应用户
+        //   3) statDate 是 "yyyyMMdd" 字符串，转成 LocalDate：
+        //        LocalDate.parse(reservation.statDate(), STAT_DATE_FORMAT)
+        //   4) 组装 AiUserDailyTokenUsage（步骤五需要新建 import）：
+        //        row.setUserId(dbUserId);
+        //        row.setStatDate(...);
+        //        row.setModelName(modelName);
+        //        row.setPromptTokens(usage.inputTokenCount()  转换，注意是 Integer 可能为 null);
+        //        row.setCompletionTokens(usage.outputTokenCount() 转换);
+        //        row.setTotalTokens(actual);
+        //        row.setRequestCount(1);
+        //      建议加一个小的私有工具方法把 Integer 转成 long（null → 0）
+        //   5) 调用 aiUserDailyTokenUsageMapper.upsertDailyUsage(row) 并打一条 debug 日志
+        //
+        //   ⚠️ estimated_cost 本轮不接：没有模型单价。传 null 会让
+        //      estimated_cost = estimated_cost + NULL 变成 NULL，把累计值抹掉，
+        //      所以 SQL 里干脆不带这一列
+        // ========================================
+    }
+
+    /**
+     * 全额退还预扣额度 —— 用于「请求被拒绝、流水线根本没跑起来」的路径，
+     * 典型场景是会话互斥锁没抢到（模型一次都没调用，当然不该扣费）。
+     *
+     * <p>调用时机：接入层 {@code finally} 里，判定「会话锁没拿到」时调它而不是
+     * {@link #settle}。若用 settle，usage 为 null 会被当成「拿不到用量」按估算值计费，
+     * 于是被拒绝的请求也扣了 2000 —— 这是很容易忽略的一处错误计费。</p>
+     *
+     * <p>与 {@link #settle} 一样，内部吞掉全部异常（它同样运行在 {@code finally} 中）。</p>
+     *
+     * <p>这里故意不走 Lua：退还只改一个键，「读旧值再写回」之间的竞态最多让计数器
+     * 短暂偏小（后续请求更容易通过），不会造成超额，属于可接受的取舍。
+     * 真正的结算路径（{@link #settle}）必须原子，两者要求不同。</p>
+     */
+    public void refund(QuotaReservation reservation) {
+        if (reservation == null) {
+            return;
+        }
+        try {
+            RBucket<String> bucket = redissonClient.getBucket(reservation.quotaKey(), StringCodec.INSTANCE);
+            String current = bucket.get();
+            if (current == null) {
+                // 键已经过期消失，说明预扣的占用已经自然消失，无需退还
+                return;
+            }
+            long after = Math.max(0L, Long.parseLong(current) - reservation.estimateTokens());
+            bucket.set(String.valueOf(after), Duration.ofSeconds(tokenQuotaProperties.getCounterTtlSeconds()));
+            log.info("退还预扣额度: userId={}, statDate={}, 退还={}, 退还后={}",
+                    reservation.userId(), reservation.statDate(), reservation.estimateTokens(), after);
+        } catch (Exception e) {
+            log.error("退还预扣额度失败: userId={}, statDate={}",
+                    reservation.userId(), reservation.statDate(), e);
+        }
     }
 }

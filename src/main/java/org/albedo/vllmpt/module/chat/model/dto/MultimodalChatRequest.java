@@ -20,7 +20,15 @@ public class MultimodalChatRequest {
     /** 会话 ID */
     private String sessionId;
 
-    private String UserId;
+    /**
+     * 用户 ID（sys_user.id）。
+     * <p>
+     * 与 {@code sessionId} 的区别：userId 是「谁」，用于配额与用量落库；sessionId 是「哪次会话」，用于记忆与互斥锁。
+     * 显式传入时，Token 配额的 Redis 键会变成 {@code ai:quota:1:{yyyyMMdd}}，
+     * 与 {@code ai_user_daily_token_usage.user_id=1} 对得上；不传则退回 sessionId。
+     */
+    private String userId;
+
     /** 用户输入的文本 */
     private String text;
 

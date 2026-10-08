@@ -1,14 +1,18 @@
 package org.albedo.vllmpt.module.chat.controller;
 
 
+import dev.langchain4j.model.output.TokenUsage;
 import org.albedo.vllmpt.common.exception.BusinessException;
 import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineExecutor;
+import org.albedo.vllmpt.module.chat.config.TokenQuotaProperties;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
+import org.albedo.vllmpt.module.chat.model.vo.QuotaReservation;
 import org.albedo.vllmpt.module.chat.service.ChatSessionLockService;
 import org.albedo.vllmpt.module.chat.service.ConcurrentLimitService;
+import org.albedo.vllmpt.module.chat.service.TokenQuotaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -49,6 +53,12 @@ public class ChatPiplineController {
     @Autowired
     private ChatSessionLockService sessionLockService;
 
+    @Autowired
+    private TokenQuotaService tokenQuotaService;
+
+    @Autowired
+    private TokenQuotaProperties tokenQuotaProperties;
+
     @PostMapping("/fack")
     public Result<String> testPipline(@RequestBody(required = false) MultimodalChatRequest mpc){
 
@@ -69,14 +79,31 @@ public class ChatPiplineController {
         if ( !res)
             throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
 
+        // finally 里结算要用：预扣凭证 + 真实用量
+        QuotaReservation reservation = null;
+        TokenUsage usage = null;
+
         boolean sessionLocked = false;
         try {
+            // ============ TODO [步骤6-1] 预扣当日 Token 额度 ============
+            //   reservation = tokenQuotaService.preDeduct(userId, tokenQuotaProperties.getEstimateTokens());
+            //   为什么必须写在 try 内部（而不是上面 tryAcquire 旁边）：
+            //   额度不足会抛 402，写在 try 之外的话 finally 完全不执行，
+            //   上面刚拿到的并发额度就泄漏了
+            // ==========================================================
 
             sessionLocked=sessionLockService.tryLockSession(sessionId);
             if (!sessionLocked){
                 throw new BusinessException(CODE_SESSION_BUSY, "该会话正在处理中，请稍候再试");
             }
             executor.execute(chatPipeline, ctx);
+
+            // ============ TODO [步骤6-2] 取真实用量 ============
+            //   usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
+            //   ⚠️ ChatPipelineContext 在业务代码里是裸类型，getAttribute 返回 Object，必须强转
+            //   这是 ChatAgentStage 逐轮累加后写进来的；流式响应通常不带用量，会是 null
+            // ==================================================
+
             if (ctx.isInterrupted()) {
                 return Result.error(505, ctx.getInterruptReason());
             }
@@ -88,6 +115,21 @@ public class ChatPiplineController {
         } finally {
 
             if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
+
+            // ============ TODO [步骤6-3] 结算：多退少补 + 分模型累计 + 落库 ============
+            //   if (sessionLocked) {
+            //       tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
+            //   } else {
+            //       // 会话锁没拿到 → 流水线根本没跑 → 不能扣费，全额退还预扣
+            //       tokenQuotaService.refund(reservation);
+            //   }
+            //   位置要求：unlock 之后、release 之前。
+            //   finally 里一条语句抛异常，后面的都不会执行 ——
+            //   而 settle / refund 内部已经吞掉全部异常（这是它们的实现要求），
+            //   所以不会阻断下面最关键的那行 release。
+            //   预扣没成功时 reservation 为 null，settle 与 refund 都会直接返回。
+            // ==========================================================================
+
             concurrentLimitService.release(userId,requestId);
         }
     }
@@ -127,12 +169,25 @@ public class ChatPiplineController {
         if ( !res)
             throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
 
+        // ============ TODO [步骤6-4] 预扣当日 Token 额度 ============
+        //   把下面这行替换成：
+        //       QuotaReservation reservation = preDeductOrRelease(userId, requestId);
+        //   两个硬性要求：
+        //   1) 必须发生在 return sink.asFlux() 之前 —— 一旦开始返回 text/event-stream（HTTP 200），
+        //      就再也改不成 402 的 JSON 响应了（和 429 是同一个道理）；
+        //   2) 必须走 preDeductOrRelease，而不是直接调 tokenQuotaService.preDeduct ——
+        //      预扣失败时要退还上面那行刚占用的并发额度（方法里已经处理好）；
+        //   3) 只赋值一次，这样它才能被下面的 lambda 捕获。
+        // ==========================================================
+        QuotaReservation reservation = null;
+
         // 注入流式通道：ChatAgentStage 检测到后改用 StreamingChatModel 逐 token 回调
         ctx.setAttribute(ChatPipelineContext.STREAM_TOKEN_CONSUMER,
                 (Consumer<String>) sink::tryEmitNext);
 
         CompletableFuture.runAsync(() -> {
             boolean sessionLocked = false;
+            TokenUsage usage = null;
             try {
                    sessionLocked = sessionLockService.tryLockSession(sessionId);
                    if (!sessionLocked){
@@ -143,6 +198,11 @@ public class ChatPiplineController {
                    }
 
                 executor.execute(chatPipeline, ctx);
+
+                // ============ TODO [步骤6-5] 取真实用量 ============
+                //   usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
+                // ==================================================
+
                 if (ctx.isInterrupted()) {
                     sink.tryEmitNext("[ERROR] " + ctx.getInterruptReason());
                 } else if (ctx.getAttribute("response") == null) {
@@ -154,6 +214,16 @@ public class ChatPiplineController {
                 sink.tryEmitError(e);
             } finally {
                 if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
+
+                // ============ TODO [步骤6-6] 结算：多退少补 + 分模型累计 + 落库 ============
+                //   if (sessionLocked) {
+                //       tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
+                //   } else {
+                //       tokenQuotaService.refund(reservation);
+                //   }
+                //   与 /fack 完全一致，顺序同样是 unlock 之后、release 之前
+                // ==========================================================================
+
                 concurrentLimitService.release(userId,requestId);
             }
         });
@@ -181,10 +251,48 @@ public class ChatPiplineController {
     }
 
     /**
-     * 并发限制的"用户"标识：当前项目无 userId 体系，复用 sessionId，缺失时兜底 anonymous，
+     * 并发限制的"用户"标识：当前项目无 userId 体系，优先取请求体里显式传入的 userId，缺失时退回 sessionId，再兜底 anonymous，
      */
     private String resolveUserId(ChatPipelineContext ctx) {
+        MultimodalChatRequest request = (MultimodalChatRequest) ctx.getAttribute("request");
+        if (request != null && request.getUserId() != null && !request.getUserId().isBlank()) {
+            return request.getUserId().trim();
+        }
         String sessionId = (String) ctx.getAttribute("sessionId");
         return (sessionId == null || sessionId.isBlank()) ? "anonymous" : sessionId;
+    }
+
+    /**
+     * 结算与落库用的模型名。
+     * <p>
+     * 优先取上下文里的 {@code modelName}（Stage 可能改写），退回请求里的 {@code modelName}，
+     * 最后兜底 {@code "unknown"} —— 表里 {@code model_name} 是唯一键的一部分，不能为 null。
+     */
+    private String resolveModelName(ChatPipelineContext ctx) {
+        String modelName = ctx.getModelName();
+        if (modelName != null && !modelName.isBlank()) {
+            return modelName;
+        }
+        Object fromRequest = ctx.getAttribute("modelId");
+        return fromRequest == null ? "unknown" : fromRequest.toString();
+    }
+
+    /**
+     * 预扣当日 Token 额度；失败时先退还刚占用的并发额度，再把 402 抛出去。
+     * <p>
+     * 抽成方法，是为了让 {@code /stream} 里能写成「一次赋值」的形式
+     * （{@code QuotaReservation reservation = preDeductOrRelease(userId, requestId);}），
+     * 这样它天然可以被 runAsync 的 lambda 捕获。
+     * <p>
+     * 顺序是「并发额度 → 预扣 → 会话锁」，所以预扣失败时必须退还并发额度，
+     * 否则额度只增不减，用户会被自己失败的请求挤爆。
+     */
+    private QuotaReservation preDeductOrRelease(String userId, String requestId) {
+        try {
+            return tokenQuotaService.preDeduct(userId, tokenQuotaProperties.getEstimateTokens());
+        } catch (RuntimeException e) {
+            concurrentLimitService.release(userId, requestId);
+            throw e;
+        }
     }
 }

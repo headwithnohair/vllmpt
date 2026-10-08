@@ -140,5 +140,16 @@ ai:
     window-seconds: 300
     # key 兜底过期时间（秒），建议留出窗口的 2 倍余量
     key-ttl-seconds: 600
+  # 每日 Token 配额（Redis 预扣 + 结算）
+  quota:
+    # 每次请求的预扣估算值（固定保守值，不依赖 maxTokens）
+    # 边界：若某用户的日额度小于该值，第一次预扣就会失败，该用户无法使用
+    estimate-tokens: 2000
+    # 用户在 ai_user_token_quota 里没有记录时使用的默认日额度
+    default-daily-limit: 10000
+    # 日额度缓存的过期时间（秒），配额变更时应主动删掉 ai:quota:limit:{userId}
+    cache-ttl-seconds: 600
+    # 额度计数器与分模型用量 Hash 的兜底过期时间（秒），默认 2 天
+    counter-ttl-seconds: 172800
 
 # Spring Security 配置 - 开发环境关闭安全验证
