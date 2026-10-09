@@ -85,12 +85,8 @@ public class ChatPiplineController {
 
         boolean sessionLocked = false;
         try {
-            // ============ TODO [步骤6-1] 预扣当日 Token 额度 ============
-            //   reservation = tokenQuotaService.preDeduct(userId, tokenQuotaProperties.getEstimateTokens());
-            //   为什么必须写在 try 内部（而不是上面 tryAcquire 旁边）：
-            //   额度不足会抛 402，写在 try 之外的话 finally 完全不执行，
-            //   上面刚拿到的并发额度就泄漏了
-            // ==========================================================
+               reservation = tokenQuotaService.preDeduct(userId, tokenQuotaProperties.getEstimateTokens());
+
 
             sessionLocked=sessionLockService.tryLockSession(sessionId);
             if (!sessionLocked){
@@ -98,11 +94,7 @@ public class ChatPiplineController {
             }
             executor.execute(chatPipeline, ctx);
 
-            // ============ TODO [步骤6-2] 取真实用量 ============
-            //   usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
-            //   ⚠️ ChatPipelineContext 在业务代码里是裸类型，getAttribute 返回 Object，必须强转
-            //   这是 ChatAgentStage 逐轮累加后写进来的；流式响应通常不带用量，会是 null
-            // ==================================================
+               usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
 
             if (ctx.isInterrupted()) {
                 return Result.error(505, ctx.getInterruptReason());
@@ -115,20 +107,16 @@ public class ChatPiplineController {
         } finally {
 
             if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
-
-            // ============ TODO [步骤6-3] 结算：多退少补 + 分模型累计 + 落库 ============
-            //   if (sessionLocked) {
-            //       tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
-            //   } else {
-            //       // 会话锁没拿到 → 流水线根本没跑 → 不能扣费，全额退还预扣
-            //       tokenQuotaService.refund(reservation);
-            //   }
-            //   位置要求：unlock 之后、release 之前。
+               if (sessionLocked) {
+                   tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
+               } else {
+                   // 会话锁没拿到 → 流水线根本没跑 → 不能扣费，全额退还预扣
+                   tokenQuotaService.refund(reservation);
+               }
             //   finally 里一条语句抛异常，后面的都不会执行 ——
             //   而 settle / refund 内部已经吞掉全部异常（这是它们的实现要求），
             //   所以不会阻断下面最关键的那行 release。
             //   预扣没成功时 reservation 为 null，settle 与 refund 都会直接返回。
-            // ==========================================================================
 
             concurrentLimitService.release(userId,requestId);
         }
@@ -169,17 +157,8 @@ public class ChatPiplineController {
         if ( !res)
             throw new BusinessException(CODE_TOO_MANY_CONCURRENT ,"您的并发请求过多，请稍后重试") ;
 
-        // ============ TODO [步骤6-4] 预扣当日 Token 额度 ============
-        //   把下面这行替换成：
-        //       QuotaReservation reservation = preDeductOrRelease(userId, requestId);
-        //   两个硬性要求：
-        //   1) 必须发生在 return sink.asFlux() 之前 —— 一旦开始返回 text/event-stream（HTTP 200），
-        //      就再也改不成 402 的 JSON 响应了（和 429 是同一个道理）；
-        //   2) 必须走 preDeductOrRelease，而不是直接调 tokenQuotaService.preDeduct ——
-        //      预扣失败时要退还上面那行刚占用的并发额度（方法里已经处理好）；
-        //   3) 只赋值一次，这样它才能被下面的 lambda 捕获。
-        // ==========================================================
-        QuotaReservation reservation = null;
+        QuotaReservation reservation = preDeductOrRelease(userId, requestId);
+
 
         // 注入流式通道：ChatAgentStage 检测到后改用 StreamingChatModel 逐 token 回调
         ctx.setAttribute(ChatPipelineContext.STREAM_TOKEN_CONSUMER,
@@ -199,9 +178,7 @@ public class ChatPiplineController {
 
                 executor.execute(chatPipeline, ctx);
 
-                // ============ TODO [步骤6-5] 取真实用量 ============
-                //   usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
-                // ==================================================
+                   usage = (TokenUsage) ctx.getAttribute(ChatPipelineContext.TOKEN_USAGE);
 
                 if (ctx.isInterrupted()) {
                     sink.tryEmitNext("[ERROR] " + ctx.getInterruptReason());
@@ -215,15 +192,12 @@ public class ChatPiplineController {
             } finally {
                 if (sessionLocked) { sessionLockService.unlockSession(sessionId); }
 
-                // ============ TODO [步骤6-6] 结算：多退少补 + 分模型累计 + 落库 ============
-                //   if (sessionLocked) {
-                //       tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
-                //   } else {
-                //       tokenQuotaService.refund(reservation);
-                //   }
-                //   与 /fack 完全一致，顺序同样是 unlock 之后、release 之前
-                // ==========================================================================
 
+                   if (sessionLocked) {
+                       tokenQuotaService.settle(reservation, usage, resolveModelName(ctx));
+                   } else {
+                       tokenQuotaService.refund(reservation);
+                   }
                 concurrentLimitService.release(userId,requestId);
             }
         });
