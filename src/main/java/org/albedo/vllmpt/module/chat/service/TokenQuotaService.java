@@ -8,6 +8,7 @@ import org.albedo.vllmpt.module.chat.config.TokenQuotaProperties;
 import org.albedo.vllmpt.module.chat.model.vo.QuotaLimit;
 import org.albedo.vllmpt.module.chat.model.vo.QuotaReservation;
 import org.albedo.vllmpt.module.quota.mapper.AiUserDailyTokenUsageMapper;
+import org.albedo.vllmpt.module.quota.model.entity.AiUserDailyTokenUsage;
 import org.redisson.api.RBucket;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
@@ -120,10 +121,10 @@ public class TokenQuotaService {
             local modelName =  ARGV[2]
             local actualTokens =  ARGV[3]
             local ttlSeconds =  ARGV[4]
-            local res1
-            local res2
+           
+           
             if diff ~= 0 then
-                res1=redis.call("INCRBY",quotaKey,diff)
+                redis.call("INCRBY",quotaKey,diff)
                 local after = tonumber(redis.call("GET", quotaKey))
                 if after and after < 0 then
                     redis.call("SET", quotaKey, 0)
@@ -182,41 +183,30 @@ public class TokenQuotaService {
      * @param modelName   模型名，用于分模型累计与落库（表里 {@code model_name} 是唯一键的一部分，不能为 null）
      */
     public void settle(QuotaReservation reservation, TokenUsage usage, String modelName) {
-        // ============ TODO [步骤4-2] ============
-        //  整体结构（先想清楚再动手）：
-        //
-        //   if (reservation == null) { return; }
-        //   try {
-        //       ... 下面 1) ~ 3)
-        //   } catch (Exception e) {
-        //       log.error(...);            // 只打日志，不要 rethrow
-        //   }
-        //
-        //  1) 计算真实用量（取不到就按估算值计费，差额正好为 0，不会留下虚高的计数器）：
-        //       long actual = (usage != null && usage.totalTokenCount() != null)
-        //               ? usage.totalTokenCount()
-        //               : reservation.estimateTokens();
-        //     走兜底分支时打一条 warn，并把 usage 是否为 null 也带上 —— 流式响应大概率走这里
-        //
-        //  2) 执行结算脚本（一次原子完成三件事）：
-        //       long diff = actual - reservation.estimateTokens();
-        //       redissonClient.getScript(StringCodec.INSTANCE).eval(
-        //           RScript.Mode.READ_WRITE,
-        //           SETTLE_LUA,
-        //           RScript.ReturnType.LONG,
-        //           List.of(reservation.quotaKey(),
-        //                   RedisKey.usage(reservation.userId(), reservation.statDate())),
-        //           String.valueOf(diff),
-        //           modelName,
-        //           String.valueOf(actual),
-        //           String.valueOf(tokenQuotaProperties.getCounterTtlSeconds()));
-        //     ⚠️ KEYS[1] 必须用 reservation.quotaKey()，不要在这里重新算日期（跨零点会写歪）
-        //     ⚠️ 差额回补与「是否限制额度」无关：不限制时脚本里也执行了 INCRBY 预扣，
-        //        所以两种情况都要回补，否则计数器会越来越虚高
-        //
-        //  3) 落库：调用下面已经留好的 persistDailyUsage(reservation, usage, modelName, actual)
-        //     它负责把本次用量累加写进 ai_user_daily_token_usage（方法在步骤五里配套实现）
-        // ========================================
+           if (reservation == null) { return; }
+           try {
+
+           long actual = (usage != null && usage.totalTokenCount() != null)
+                   ? usage.totalTokenCount()
+                   : reservation.estimateTokens();
+           long diff = actual - reservation.estimateTokens();
+           redissonClient.getScript(StringCodec.INSTANCE).eval(
+               RScript.Mode.READ_WRITE,
+               SETTLE_LUA,
+               RScript.ReturnType.LONG,
+               List.of(reservation.quotaKey(),
+                       RedisKey.usage(reservation.userId(), reservation.statDate())),
+               String.valueOf(diff),
+               modelName,
+               String.valueOf(actual),
+               String.valueOf(tokenQuotaProperties.getCounterTtlSeconds()));
+           persistDailyUsage(reservation, usage, modelName, actual);
+
+
+           } catch (Exception e) {
+               log.error("结算时出错，{}", e.getMessage(),e);            // 只打日志，不要 rethrow
+           }
+
     }
 
     /**
@@ -231,29 +221,27 @@ public class TokenQuotaService {
      */
     private void persistDailyUsage(QuotaReservation reservation, TokenUsage usage,
                                    String modelName, long actual) {
-        // ============ TODO [步骤4-3] ============
-        //   1) usage == null 直接 return（没拿到用量就不落库）
-        //   2) reservation.userId() 是 String，而表里 user_id 是 BIGINT，需要转换：
-        //        Long dbUserId = Long.parseLong(reservation.userId());
-        //      解析失败（anonymous、sessionId 这类非数字标识）就 return，
-        //      打一条 debug 即可 —— 这不是错误，只是这些标识本来就没有对应用户
-        //   3) statDate 是 "yyyyMMdd" 字符串，转成 LocalDate：
-        //        LocalDate.parse(reservation.statDate(), STAT_DATE_FORMAT)
-        //   4) 组装 AiUserDailyTokenUsage（步骤五需要新建 import）：
-        //        row.setUserId(dbUserId);
-        //        row.setStatDate(...);
-        //        row.setModelName(modelName);
-        //        row.setPromptTokens(usage.inputTokenCount()  转换，注意是 Integer 可能为 null);
-        //        row.setCompletionTokens(usage.outputTokenCount() 转换);
-        //        row.setTotalTokens(actual);
-        //        row.setRequestCount(1);
-        //      建议加一个小的私有工具方法把 Integer 转成 long（null → 0）
-        //   5) 调用 aiUserDailyTokenUsageMapper.upsertDailyUsage(row) 并打一条 debug 日志
-        //
-        //   ⚠️ estimated_cost 本轮不接：没有模型单价。传 null 会让
-        //      estimated_cost = estimated_cost + NULL 变成 NULL，把累计值抹掉，
-        //      所以 SQL 里干脆不带这一列
-        // ========================================
+        if (usage ==null) {return;}
+        try{
+            Long dbUserId = Long.parseLong(reservation.userId());
+            LocalDate statDate=LocalDate.parse(reservation.statDate(), STAT_DATE_FORMAT);
+            AiUserDailyTokenUsage row =new AiUserDailyTokenUsage();
+            row.setUserId(dbUserId);
+            row.setStatDate(statDate);
+            row.setModelName(modelName);
+            row.setPromptTokens(Long.valueOf(usage.inputTokenCount()));
+            row.setCompletionTokens(Long.valueOf(usage.outputTokenCount()));
+            row.setTotalTokens(actual);
+            row.setRequestCount(1);
+            aiUserDailyTokenUsageMapper.upsertDailyUsage(row);
+            log.debug("upsertDailyUsage,rowId:{},userID:{}," +
+                            "inputTokenCount:{},outputTokenCount:{}",
+                    row.getId(),dbUserId,usage.inputTokenCount(),usage.outputTokenCount());
+        }catch (Exception e){
+            log.debug("转换错误，{}", e.getMessage(),e);            // 只打日志，不要 rethrow
+
+            return;
+        }
     }
 
     /**

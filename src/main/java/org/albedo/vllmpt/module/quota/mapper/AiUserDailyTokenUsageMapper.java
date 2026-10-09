@@ -2,7 +2,9 @@ package org.albedo.vllmpt.module.quota.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.albedo.vllmpt.module.quota.model.entity.AiUserDailyTokenUsage;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
 
 /**
  * 用户每日 Token 用量表数据访问接口。
@@ -44,6 +46,16 @@ public interface AiUserDailyTokenUsageMapper extends BaseMapper<AiUserDailyToken
      * @param usage 本次请求的用量，{@code statDate} 为当天、计数字段为本次增量
      * @return 受影响行数
      */
+
+    @Insert("INSERT INTO ai_user_daily_token_usage (user_id, stat_date, model_name, prompt_tokens, " +
+            "completion_tokens, total_tokens, request_count) " +
+            "values (#{user_id},#{stat_date}," +
+            "#{model_name},#{prompt_tokens},#{completion_tokens},#{total_tokens},1) " +
+            "ON DUPLICATE KEY UPDATE " +
+            "request_count = request_count+1," +
+            "prompt_tokens = prompt_tokens+#{prompt_tokens}," +
+            "completion_tokens = completion_tokens + #{completion_tokens}," +
+            "total_tokens = total_tokens + #{total_tokens}"
+            )
     int upsertDailyUsage(AiUserDailyTokenUsage usage);
-    // TODO [步骤5-1] 给上面这个方法补上 @Insert 注解与 SQL（注意必须写成累加，见上方说明）
 }
