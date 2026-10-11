@@ -14,10 +14,12 @@ spring:
 
 
   # 文件上传配置
+  # 场景6（百 MB 大文件 RAG 入库）：前端优先走预签名 URL 直传 MinIO（不经过后端）；
+  # 这里的上限是「经后端表单上传」路径的兜底，按最大 500MB 档位预留余量
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 100MB
+      max-file-size: 500MB
+      max-request-size: 520MB
 
 
 # 服务器配置

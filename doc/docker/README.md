@@ -5,7 +5,7 @@
 | 服务 | 版本 | 端口 | 用途 |
 |------|------|------|------|
 | **Redis** | 7.x | 6379 | 缓存、会话存储、限流计数 |
-| **RabbitMQ** | 3.12 | 5672, 15672 | 消息队列、异步任务 |
+| **RocketMQ** | 5.3.2 | 9876, 10911, 8180 | 消息队列、异步任务（NameServer + Broker + Dashboard） |
 | **Elasticsearch** | 8.11 | 9200, 9300 | 日志存储、全文检索 |
 | **Kibana** | 8.11 | 5601 | 日志可视化、数据分析 |
 | **Logstash** | 8.11 | 5044, 9600 | 日志收集、处理 |
@@ -57,11 +57,11 @@ docker-compose -f docker-compose-env.yml restart elasticsearch
 - **密码**: `redis123`
 - **连接命令**: `redis-cli -h localhost -p 6379 -a redis123`
 
-### RabbitMQ
-- **AMQP 地址**: `localhost:5672`
-- **管理界面**: http://localhost:15672
-- **用户名**: `guest`
-- **密码**: `guest`
+### RocketMQ
+- **NameServer 地址**: `localhost:9876`
+- **Broker 端口**: `10911`（客户端收发）、`10909`（VIP 通道）
+- **Dashboard 管理界面**: http://localhost:8180
+- **说明**: 单机单 Master；Broker 配置见 `rocketmq/broker.conf`（brokerIP1=127.0.0.1）
 
 ### Elasticsearch
 - **地址**: `http://localhost:9200`
@@ -87,7 +87,7 @@ docker-compose -f docker-compose-env.yml restart elasticsearch
 
 ## 📊 健康检查
 
-所有服务都配置了健康检查，可以通过以下命令查看状态：
+带健康检查的服务（如 Redis、MySQL）可通过以下命令查看健康状态：
 
 ```bash
 # 查看所有服务状态
@@ -105,7 +105,9 @@ docker inspect --format='{{.State.Health.Status}}' vllmpt-redis
 
 **数据卷列表**：
 - `redis_data` - Redis 数据
-- `rabbitmq_data` - RabbitMQ 数据
+- `rocketmq_broker_store` - RocketMQ Broker 消息存储（commitlog / consumequeue）
+- `rocketmq_broker_logs` - RocketMQ Broker 日志
+- `rocketmq_namesrv_logs` - RocketMQ NameServer 日志
 - `es_data` - Elasticsearch 数据
 - `minio_data` - MinIO 数据
 
@@ -137,7 +139,7 @@ docker-compose -f docker-compose-env.yml logs -f elasticsearch
 
 ### 查看最近 100 行日志
 ```bash
-docker-compose -f docker-compose-env.yml logs --tail=100 rabbitmq
+docker-compose -f docker-compose-env.yml logs --tail=100 rocketmq-broker
 ```
 
 ---
@@ -209,9 +211,9 @@ docker-compose -f docker-compose-env.yml logs -f logstash
 
 ## 🔐 安全建议（生产环境）
 
-1. **修改默认密码**
+1. **修改默认密码 / 开启认证**
    - Redis 密码
-   - RabbitMQ 用户名/密码
+   - RocketMQ 开启 ACL（默认未开启）
    - MinIO 用户名/密码
 
 2. **启用 Elasticsearch 安全认证**
@@ -233,7 +235,7 @@ docker-compose -f docker-compose-env.yml logs -f logstash
 ## 📚 相关文档
 
 - [Redis 官方文档](https://redis.io/documentation)
-- [RabbitMQ 官方文档](https://www.rabbitmq.com/documentation.html)
+- [RocketMQ 官方文档](https://rocketmq.apache.org/docs/)
 - [Elasticsearch 官方文档](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html)
 - [Kibana 官方文档](https://www.elastic.co/guide/en/kibana/current/index.html)
 - [Logstash 官方文档](https://www.elastic.co/guide/en/logstash/current/index.html)

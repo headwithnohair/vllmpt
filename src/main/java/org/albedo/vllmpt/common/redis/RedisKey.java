@@ -51,4 +51,23 @@ public final class RedisKey {
     public static String sessionLock(String sessionId) {
         return SESSION_LOCK_PREFIX + sessionId;
     }
+
+    /** 文件解析任务实时进度前缀（Hash） */
+    public static final String FILE_TASK_PROGRESS_PREFIX = "ai:file:task:progress:";
+
+    /**
+     * 文件解析任务实时进度：ai:file:task:progress:{taskId}  Hash
+     * <p>
+     * 由消费者在每个阶段完成后写入，供 SSE 推送 / 前端轮询读取；
+     * 建议字段：{@code status}（PENDING/RUNNING/SUCCESS/FAILED）、{@code stage}（当前阶段）、
+     * {@code percent}（0-100）、{@code message}（展示文案/错误摘要）、{@code updatedAt}（毫秒时间戳）。
+     * <p>
+     * TTL 取配置 {@code app.file-task.progress-ttl-seconds}（默认 24h），兜底清理异常中断的残留 key。
+     * <p>
+     * 注意：消费/写入时使用 String 可读的 codec（如 {@code StringCodec.INSTANCE}），
+     * 否则 redis-cli 里看到的是二进制乱码。
+     */
+    public static String fileTaskProgress(String taskId) {
+        return FILE_TASK_PROGRESS_PREFIX + taskId;
+    }
 }

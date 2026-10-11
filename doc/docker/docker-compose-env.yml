@@ -40,26 +40,61 @@ services:
       timeout: 5s
       retries: 5
 
-  # ========== RabbitMQ ==========
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    container_name: vllmpt-rabbitmq
+  # ========== RocketMQ ==========
+  # 拓扑：NameServer（路由中心） + Broker（存储/收发） + Dashboard（管理界面）
+  # 说明：
+  #   * broker.conf 固定 brokerIP1=127.0.0.1（Windows/macOS Docker Desktop 官方方案），
+  #     宿主机应用通过端口映射直连 Broker，否则客户端会拿到容器内网 IP 导致连不上
+  #   * JAVA_OPT_EXT 必须限制堆内存：镜像默认 8G 会把开发机拖垮
+  #   * autoCreateTopicEnable=true 仅为开发便利，生产环境必须关闭
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.2
+    container_name: vllmpt-rocketmq-namesrv
+    command: sh mqnamesrv
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      - "JAVA_OPT_EXT=-Xms256m -Xmx256m -Xmn128m"
     ports:
-      - "5672:5672"    # AMQP 端口
-      - "15672:15672"  # 管理界面端口
+      - "9876:9876"
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - rocketmq_namesrv_logs:/home/rocketmq/logs
     networks:
       - vllmpt-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.2
+    container_name: vllmpt-rocketmq-broker
+    command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+    environment:
+      - "NAMESRV_ADDR=rocketmq-namesrv:9876"
+      - "JAVA_OPT_EXT=-Xms512m -Xmx512m -Xmn256m"
+    ports:
+      - "10911:10911"  # Broker 主端口（客户端收发消息）
+      - "10909:10909"  # VIP 通道（主从同步/切换）
+    volumes:
+      - ./rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+      - rocketmq_broker_store:/home/rocketmq/store
+      - rocketmq_broker_logs:/home/rocketmq/logs
+    depends_on:
+      - rocketmq-namesrv
+    networks:
+      - vllmpt-network
+    restart: unless-stopped
+
+  rocketmq-dashboard:
+    image: apacherocketmq/rocketmq-dashboard:2.1.0
+    container_name: vllmpt-rocketmq-dashboard
+    environment:
+      - "NAMESRV_ADDR=rocketmq-namesrv:9876"
+      - "JAVA_OPTS=-Xms256m -Xmx256m -Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
+    ports:
+      - "8180:8080"  # 宿主 8180 避免与应用默认 8080 冲突
+    depends_on:
+      - rocketmq-namesrv
+      - rocketmq-broker
+    networks:
+      - vllmpt-network
+    restart: unless-stopped
 
   # ========== Elasticsearch ==========
   elasticsearch:
@@ -178,7 +213,11 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  rabbitmq_data:
+  rocketmq_namesrv_logs:
+    driver: local
+  rocketmq_broker_store:
+    driver: local
+  rocketmq_broker_logs:
     driver: local
   es_data:
     driver: local

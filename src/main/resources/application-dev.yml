@@ -27,25 +27,26 @@ spring:
           min-idle: 5
           max-wait: 3000ms
   
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-    virtual-host: /
-    listener:
-      simple:
-        acknowledge-mode: manual
-        prefetch: 10
-        concurrency: 5
-        max-concurrency: 10
-    template:
-      retry:
-        enabled: true
-        initial-interval: 1000ms
-        max-attempts: 3
-        max-interval: 10000ms
-        multiplier: 2
+
+# ==========================================
+# RocketMQ 配置（替代原 RabbitMQ；NameServer/Broker 见 doc/docker/docker-compose-env.yml）
+# 场景6考点映射：
+#   发布确认 -> 同步发送判 SendResult.sendStatus / 异步 SendCallback
+#   手动 ACK -> 消费返回 ConsumeConcurrentlyStatus（RECONSUME_LATER 触发 broker 重试）
+#   死信队列 -> 消费重试耗尽后自动进入 %DLQ%{消费者组}，无需声明 DLX
+#   延迟队列 -> 原生延迟消息 MessageDelayLevel（18 级：1s~2h），无需插件
+# ==========================================
+rocketmq:
+  # NameServer 地址：对应 compose 中 rocketmq-namesrv 映射到宿主机的 9876
+  name-server: 127.0.0.1:9876
+  producer:
+    # 生产者组（必配：不配置则 RocketMQTemplate 不会自动装配；事务消息回查也依赖它）
+    group: vllmpt-producer
+    # 同步发送超时（毫秒）
+    send-message-timeout: 3000
+    # 同步/异步发送失败重试次数（仅网络类失败；broker 明确拒绝不重试）
+    retry-times-when-send-failed: 2
+    retry-times-when-send-async-failed: 2
 
 # MinIO 配置
 minio:
@@ -130,6 +131,20 @@ app:
     base-url: http://localhost:8000
     knowledge-base-collection: vllmpt_knowledge_base
     user-profile-collection: vllmpt_user_profiles
+  # 大文件解析入库任务（场景6）：
+  # 实时进度存 Redis（RedisKey.fileTaskProgress），台账存 MySQL（ai_file_parse_task）
+  file-task:
+    # 进度 Hash 的过期时间（秒）：兜底清理，防止异常中断的任务 key 永久残留
+    progress-ttl-seconds: 86400
+    # 单阶段超时阈值（秒）：超过该时长仍停留在“进行中”的任务，由延迟检查消息判定超时并进入告警/重试
+    stage-timeout-seconds: 1800
+  # 告警：目前由 DLQ 消费者 / 超时检查触发；未配置 webhook 时只打 ERROR 日志
+  alert:
+    enabled: true
+    # 钉钉/飞书机器人 webhook 地址，留空 = 只打本地日志
+    webhook-url: ""
+    # webhook 消息格式：DINGTALK / FEISHU
+    format: DINGTALK
 
 # 单用户并发推理限制（Redis ZSet）
 ai:

@@ -35,7 +35,7 @@
         <mybatis-plus.version>3.5.15</mybatis-plus.version>
         <hutool.version>5.8.44</hutool.version>
         <commons-lang3.version>3.20.0</commons-lang3.version>
-        <rabbitMQ.version>5.30.0</rabbitMQ.version>
+        <rocketmq-spring.version>2.3.6</rocketmq-spring.version>
         <elasticsearch.version>9.4.1</elasticsearch.version>
         <minio.version>8.5.7</minio.version>
         <langchain4j.version>1.16.2</langchain4j.version>
@@ -61,11 +61,16 @@
 
 
     <dependencies>
+        <!-- ========== 消息队列 ========== -->
+        <!-- RocketMQ Spring Boot Starter：
+             发送侧：RocketMQTemplate（同步/异步/顺序/事务/延迟消息）
+             消费侧：@RocketMQMessageListener（并发/顺序消费、消费重试、死信队列）
+             注意：必须在 yml 中配置 rocketmq.name-server 与 rocketmq.producer.group，
+             否则 RocketMQTemplate 不会自动装配（starter 的自动配置条件） -->
         <dependency>
-            <groupId>com.rabbitmq</groupId>
-            <artifactId>amqp-client</artifactId>
-            <version>${rabbitMQ.version}</version>
-            <scope>compile</scope>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>${rocketmq-spring.version}</version>
         </dependency>
         <!-- ========== LangChain4j AI 框架（稳定版 0.35.0）========== -->
         <!-- Spring Boot Starter（核心，包含自动配置） -->

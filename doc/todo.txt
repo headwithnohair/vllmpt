@@ -133,19 +133,20 @@ Python 迁移映射：Python 中使用 elasticsearch-dsl 库可以像写 ORM 一
 
 
 
-三、 消息队列 (kafka) 进阶场景：从“简单异步”到“复杂状态机与可靠性”
+三、 消息队列 (RocketMQ) 进阶场景：从“简单异步”到“复杂状态机与可靠性”
 文档 10.3 规划了 MQ 用于文件解析。我们需要设计更健壮的架构。
 场景 6：百 MB 大文件 RAG 入库的“异步流水线与进度追踪”
 业务背景：用户上传 200MB 的 PDF，后端如果同步处理会超时。必须异步化，且前端需要看到“解析中(30%) -> 分块中(60%) -> 向量化中(90%) -> 完成”的进度。
 核心需求：
-设计 MQ 拓扑：file.parse.exchange (Direct) -> parse.queue -> embed.queue。
+设计 MQ 拓扑：按阶段拆分 Topic / 消费组（解析 -> 向量化），结合 Tag 过滤实现阶段路由。
 消费者处理完一个阶段，将进度写入 Redis，并通过 WebSocket/SSE 推送给前端。
 如果向量化阶段失败（如 Chroma 宕机），消息进入死信队列 (DLQ)，并触发告警。
 技术考点：
-RabbitMQ 路由机制：Direct / Topic 交换机的使用。
-消息可靠性：Publisher Confirm, 消费者 Manual ACK, 死信队列 (DLX) 配置。
-延迟队列：使用 rabbitmq_delayed_message_exchange 插件处理超时未响应的任务。
-Python 迁移映射：Python 中通常不直接写底层 AMQP 协议，而是使用 Celery (结合 Redis/RabbitMQ 作为 Broker) 或 aio-pika (异步原生客户端)。学习 Celery 的 Canvas (Chain, Chord, Group) 非常适合这个场景。
+RocketMQ 路由机制：Topic / Tag 过滤、MessageQueue 分片与消费组负载均衡。
+消息可靠性：同步/异步发送结果（SendResult / SendCallback）、消费重试（RECONSUME_LATER）与死信队列（%DLQ%）机制。
+延迟消息：使用原生延迟级别（MessageDelayLevel）处理超时未响应的任务。
+
+
 场景 7：Agent 工具调用的异步 RPC 模式
 业务背景：ReAct 循环中，模型决定调用“生成月度报表”工具。这个工具需要查库、画图，耗时 1 分钟。不能阻塞主线程。
 核心需求：
@@ -153,7 +154,7 @@ Agent 发起工具调用请求，放入 MQ，立即返回“处理中”。
 后台 Worker 执行完毕后，将结果放入 reply.queue。
 Agent 监听 reply.queue，收到结果后继续下一轮推理。
 技术考点：
-RPC 模式 (Reply Queue)：RabbitMQ 实现同步转异步的经典模式。
+RPC 模式 (Request-Reply)：RocketMQ 实现同步转异步的经典模式。
 Correlation ID：确保请求和响应正确匹配。
 
 
