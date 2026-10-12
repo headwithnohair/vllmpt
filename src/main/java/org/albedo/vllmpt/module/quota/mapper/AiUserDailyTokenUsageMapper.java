@@ -50,12 +50,12 @@ public interface AiUserDailyTokenUsageMapper extends BaseMapper<AiUserDailyToken
     @Insert("INSERT INTO ai_user_daily_token_usage (user_id, stat_date, model_name, prompt_tokens, " +
             "completion_tokens, total_tokens, request_count) " +
             "values (#{user_id},#{stat_date}," +
-            "#{model_name},#{prompt_tokens},#{completion_tokens},#{total_tokens},1) " +
+            "#{modelName},#{promptTokens},#{completionKokens},#{totalTokens},1) " +
             "ON DUPLICATE KEY UPDATE " +
             "request_count = request_count+1," +
-            "prompt_tokens = prompt_tokens+#{prompt_tokens}," +
-            "completion_tokens = completion_tokens + #{completion_tokens}," +
-            "total_tokens = total_tokens + #{total_tokens}"
+            "prompt_tokens = prompt_tokens+#{promptTokens}," +
+            "completion_tokens = completionTokens + #{completionTokens}," +
+            "total_tokens = total_tokens + #{totalTokens}"
             )
     int upsertDailyUsage(AiUserDailyTokenUsage usage);
 }

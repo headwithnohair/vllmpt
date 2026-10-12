@@ -117,7 +117,7 @@ public class TokenQuotaService {
     private static final String SETTLE_LUA = """
             local quotaKey= KEYS[1]
             local usageKey= KEYS[2]
-            local diff =       ARGV[1]
+            local diff = tonumber(ARGV[1])
             local modelName =  ARGV[2]
             local actualTokens =  ARGV[3]
             local ttlSeconds =  ARGV[4]
@@ -186,9 +186,14 @@ public class TokenQuotaService {
            if (reservation == null) { return; }
            try {
 
-           long actual = (usage != null && usage.totalTokenCount() != null)
-                   ? usage.totalTokenCount()
-                   : reservation.estimateTokens();
+           long actual;
+           if (usage != null && usage.totalTokenCount() != null) {
+               actual = usage.totalTokenCount();
+           } else {
+               actual = reservation.estimateTokens();
+               log.warn("结算时取不到真实用量，按预扣估算值计费: userId={}, statDate={}, estimate={}, usageNull={}",
+                       reservation.userId(), reservation.statDate(), reservation.estimateTokens(), usage == null);
+           }
            long diff = actual - reservation.estimateTokens();
            redissonClient.getScript(StringCodec.INSTANCE).eval(
                RScript.Mode.READ_WRITE,
@@ -229,8 +234,8 @@ public class TokenQuotaService {
             row.setUserId(dbUserId);
             row.setStatDate(statDate);
             row.setModelName(modelName);
-            row.setPromptTokens(Long.valueOf(usage.inputTokenCount()));
-            row.setCompletionTokens(Long.valueOf(usage.outputTokenCount()));
+            row.setPromptTokens(toLong(usage.inputTokenCount()));
+            row.setCompletionTokens(toLong(usage.outputTokenCount()));
             row.setTotalTokens(actual);
             row.setRequestCount(1);
             aiUserDailyTokenUsageMapper.upsertDailyUsage(row);
@@ -243,7 +248,9 @@ public class TokenQuotaService {
             return;
         }
     }
-
+    private static long toLong(Integer value) {
+        return value == null ? 0L : value.longValue();
+    }
     /**
      * 全额退还预扣额度 —— 用于「请求被拒绝、流水线根本没跑起来」的路径，
      * 典型场景是会话互斥锁没抢到（模型一次都没调用，当然不该扣费）。
