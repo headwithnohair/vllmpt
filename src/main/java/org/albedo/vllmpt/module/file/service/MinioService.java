@@ -215,6 +215,34 @@ public class MinioService {
                         .build()
         );
     }
+
+    /**
+     * 上传文本内容到 MinIO（场景6：解析消费者把提取出的纯文本落回对象存储，
+     * 作为「解析 → 向量化」两阶段之间的交接物）。
+     *
+     * @param bucket     桶名
+     * @param objectName 对象名（建议 parsed/{taskId}.txt）
+     * @param content    文本内容（UTF-8 编码）
+     * @return 对象名（调用方塞进消息体传给下一阶段）
+     */
+    public String uploadText(String bucket, String objectName, String content) {
+        try {
+            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+            try (ByteArrayInputStream in = new ByteArrayInputStream(bytes)) {
+                minioClient.putObject(PutObjectArgs.builder()
+                        .bucket(bucket)
+                        .object(objectName)
+                        .stream(in, bytes.length, -1)
+                        .contentType("text/plain; charset=utf-8")
+                        .build());
+            }
+            return objectName;
+        } catch (Exception e) {
+            log.error("文本上传失败: bucket={}, object={}", bucket, objectName, e);
+            throw new BusinessException(500, "文本上传失败: " + objectName);
+        }
+    }
+
     /**
      * 根据 MimeType 判断文件类型
      */
