@@ -109,6 +109,9 @@ services:
       - "9300:9300"
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      # IK 中文分词插件（doc/docker/elasticsearch/plugins/analysis-ik，已内置 8.11.0 版）
+      # 首次加挂载后需重建容器才生效：docker compose up -d --force-recreate elasticsearch
+      - ./elasticsearch/plugins:/usr/share/elasticsearch/plugins
     networks:
       - vllmpt-network
     restart: unless-stopped

@@ -56,7 +56,9 @@ minio:
   bucket-name: vllmpt-images
   secure: false
 
-# Elasticsearch 配置
+# Elasticsearch 配置（场景4 混合检索；绑定 ElasticsearchProperties）
+# 注意：compose 中 xpack.security.enabled=false（开发环境关闭鉴权），
+# username/password 不会被校验；生产开启 security 后 ElasticsearchConfig 会自动启用 Basic 认证。
 elasticsearch:
   hosts: localhost:9200
   username: elastic
