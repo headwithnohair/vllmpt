@@ -20,7 +20,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan({
         "org.albedo.vllmpt.module.user.mapper",
         "org.albedo.vllmpt.module.quota.mapper",
-        "org.albedo.vllmpt.module.file.mapper"
+        "org.albedo.vllmpt.module.file.mapper",
+        "org.albedo.vllmpt.module.approval.core.mapper"
 })
 public class VllmptApplication {
 

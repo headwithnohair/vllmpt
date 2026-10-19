@@ -142,10 +142,11 @@
         </dependency>
 
         <!-- ========== 数据库相关 ========== -->
-        <!-- MyBatis-Plus -->
+        <!-- MyBatis-Plus：Spring Boot 4 必须使用 boot4 starter；
+             mybatis-plus-boot-starter 是 Boot 2 时代的包，会导致 factoryBeanObjectType 类型不兼容 -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
         </dependency>
 
         <dependency>

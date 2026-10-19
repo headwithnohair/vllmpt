@@ -32,6 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 logs
+data/
 
 ai.md
 .codebuddy/
