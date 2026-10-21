@@ -5,11 +5,13 @@ import lombok.RequiredArgsConstructor;
 import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateCreateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateDetailVO;
+import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateUpdateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalTemplate;
 import org.albedo.vllmpt.module.approval.core.service.ApprovalTemplateService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +40,33 @@ public class ApprovalTemplateController {
     public Result<Void> publish(@PathVariable("id") Long id) {
         templateService.publish(id);
         return Result.success();
+    }
+
+    /**
+     * 编辑草稿模板：只允许 DRAFT，节点全量替换。
+     */
+    @PutMapping("/{id}")
+    public Result<Void> update(@PathVariable("id") Long id,
+                               @Valid @RequestBody TemplateUpdateRequest request) {
+        templateService.update(id, request);
+        return Result.success();
+    }
+
+    /**
+     * 下线已发布模板：只影响新实例，运行中的实例不受影响。
+     */
+    @PostMapping("/{id}/disable")
+    public Result<Void> disable(@PathVariable("id") Long id) {
+        templateService.disable(id);
+        return Result.success();
+    }
+
+    /**
+     * 按业务类型返回最新已发布模板的表单 Schema。
+     */
+    @GetMapping("/schema/{bizType}")
+    public Result<String> schema(@PathVariable("bizType") String bizType) {
+        return Result.success(templateService.formSchema(bizType));
     }
 
     @GetMapping("/{id}")

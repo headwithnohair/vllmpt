@@ -1,16 +1,17 @@
 package org.albedo.vllmpt.module.approval.core.service;
 
-import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.common.exception.BusinessException;
 import org.albedo.vllmpt.common.security.UserContextHolder;
 import org.albedo.vllmpt.module.approval.core.domain.dto.InstanceDetailVO;
+import org.albedo.vllmpt.module.approval.core.domain.dto.ResubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.SubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalCc;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalInstance;
@@ -21,6 +22,7 @@ import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalAction;
 import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalInstanceStatus;
 import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalOperatorType;
 import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalTaskStatus;
+import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalTemplateStatus;
 import org.albedo.vllmpt.module.approval.core.engine.ApprovalEngine;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalCcMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalInstanceMapper;
@@ -29,9 +31,10 @@ import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTaskMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTemplateMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,8 +47,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ApprovalInstanceService {
 
-    private static final DateTimeFormatter INSTANCE_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-
     private final ApprovalInstanceMapper instanceMapper;
     private final ApprovalTemplateMapper templateMapper;
     private final ApprovalTaskMapper taskMapper;
@@ -55,50 +56,133 @@ public class ApprovalInstanceService {
     private final ApprovalEngine engine;
     private final FormSchemaValidator formSchemaValidator;
     private final ObjectMapper objectMapper;
+    private final ApprovalNumberGenerator numberGenerator;
+    private final ApprovalIdempotencyGuard idempotencyGuard;
 
     /**
      * 提交审批：创建实例、写提交流水、启动流程，全部在同一事务内。
+     * <p>
+     * 带 idempotencyKey 时，5 分钟内重复提交返回首次创建的实例，避免重复建单。
      */
     @Transactional
     public Long submit(SubmitInstanceRequest request) {
         Long userId = UserContextHolder.requireUserId();
-        ApprovalTemplate template = resolveTemplate(request);
-
-        Map<String, Object> form = toMap(request.getFormData());
-        formSchemaValidator.validate(template.getFormSchema(), form);
-
-        // 表单字段默认进入事实集；facts 显式覆盖后再补系统字段
-        Map<String, Object> facts = new LinkedHashMap<>(form);
-        if (request.getFacts() != null && !request.getFacts().isEmpty()) {
-            facts.putAll(toMap(request.getFacts()));
+        String idempotencyKey = request.getIdempotencyKey();
+        Long existing = idempotencyGuard.acquire(userId, idempotencyKey);
+        if (existing != null) {
+            log.info("[审批] 命中提交幂等: userId={}, instanceId={}", userId, existing);
+            return existing;
         }
-        facts.put("applicantId", userId);
-        facts.put("bizType", template.getBizType());
 
+        try {
+            ApprovalTemplate template = resolveTemplate(request);
+            Map<String, Object> form = toMap(request.getFormData());
+            formSchemaValidator.validate(template.getFormSchema(), form);
+            Map<String, Object> facts = buildFacts(form, request.getFacts(), template.getBizType(), userId);
+
+            Long instanceId = createAndStart(template, form, facts,
+                    StrUtil.blankToDefault(request.getTitle(), template.getName()),
+                    null, 1, ApprovalAction.SUBMIT, null, userId);
+            idempotencyGuard.complete(userId, idempotencyKey, instanceId);
+            registerRollbackRelease(userId, idempotencyKey);
+            return instanceId;
+        } catch (RuntimeException e) {
+            idempotencyGuard.release(userId, idempotencyKey);
+            throw e;
+        }
+    }
+
+    /**
+     * 驳回后重新提交：沿用原实例的模板与版本创建新实例，parent_instance_id 指向旧实例。
+     */
+    @Transactional
+    public Long resubmit(Long instanceId, ResubmitInstanceRequest request) {
+        Long userId = UserContextHolder.requireUserId();
+        ApprovalInstance parent = requireInstance(instanceId);
+        if (!userId.equals(parent.getApplicantId())) {
+            throw new BusinessException(403, "只有申请人可以重新提交");
+        }
+        if (!ApprovalInstanceStatus.REJECTED.name().equals(parent.getStatus())) {
+            throw new BusinessException(400, "只有已驳回的审批可以重新提交");
+        }
+
+        String idempotencyKey = request.getIdempotencyKey();
+        Long existing = idempotencyGuard.acquire(userId, idempotencyKey);
+        if (existing != null) {
+            log.info("[审批] 命中重新提交幂等: userId={}, instanceId={}", userId, existing);
+            return existing;
+        }
+
+        try {
+            ApprovalTemplate template = templateMapper.selectById(parent.getTemplateId());
+            if (template == null) {
+                throw new BusinessException(404, "原审批模板不存在，无法重新提交");
+            }
+            if (!ApprovalTemplateStatus.PUBLISHED.name().equals(template.getStatus())) {
+                throw new BusinessException(400, "模板已下线，无法重新提交");
+            }
+
+            Map<String, Object> form = request.getFormData() == null
+                    ? parseForm(parent.getFormData())
+                    : toMap(request.getFormData());
+            formSchemaValidator.validate(template.getFormSchema(), form);
+            Map<String, Object> facts = buildFacts(form, request.getFacts(), template.getBizType(), userId);
+
+            int submitCount = parent.getSubmitCount() == null ? 2 : parent.getSubmitCount() + 1;
+            Long newInstanceId = createAndStart(template, form, facts,
+                    StrUtil.blankToDefault(request.getTitle(), parent.getTitle()),
+                    parent.getId(), submitCount, ApprovalAction.RESUBMIT,
+                    "重新提交，原实例 " + parent.getInstanceNo(), userId);
+            idempotencyGuard.complete(userId, idempotencyKey, newInstanceId);
+            registerRollbackRelease(userId, idempotencyKey);
+            log.info("[审批] 重新提交: parent={}, new={}, applicant={}",
+                    parent.getInstanceNo(), newInstanceId, userId);
+            return newInstanceId;
+        } catch (RuntimeException e) {
+            idempotencyGuard.release(userId, idempotencyKey);
+            throw e;
+        }
+    }
+
+    private Long createAndStart(ApprovalTemplate template, Map<String, Object> form,
+                                Map<String, Object> facts, String title, Long parentInstanceId,
+                                int submitCount, ApprovalAction action, String comment, Long userId) {
         LocalDateTime now = LocalDateTime.now();
         ApprovalInstance instance = new ApprovalInstance();
-        instance.setInstanceNo(generateInstanceNo());
+        instance.setInstanceNo(numberGenerator.next(template.getBizType()));
         instance.setBizType(template.getBizType());
         instance.setBizId(0L);
         instance.setTemplateId(template.getId());
         instance.setTemplateVersion(template.getVersion());
         instance.setApplicantId(userId);
-        instance.setTitle(StrUtil.blankToDefault(request.getTitle(), template.getName()));
+        instance.setTitle(title);
         instance.setFormData(writeJson(form));
         instance.setFacts(writeJson(facts));
         instance.setStatus(ApprovalInstanceStatus.RUNNING.name());
-        instance.setSubmitCount(1);
+        instance.setParentInstanceId(parentInstanceId);
+        instance.setSubmitCount(submitCount);
         instance.setVersion(0);
         instance.setSubmittedAt(now);
         instance.setCreatedAt(now);
         instance.setUpdatedAt(now);
         instanceMapper.insert(instance);
 
-        saveRecord(instance, null, null, userId, ApprovalOperatorType.USER, ApprovalAction.SUBMIT, null);
+        saveRecord(instance, null, null, userId, ApprovalOperatorType.USER, action, comment);
         engine.start(instance.getId());
-        log.info("[审批] 提交实例: instanceId={}, no={}, template={}, applicant={}",
-                instance.getId(), instance.getInstanceNo(), template.getTemplateKey(), userId);
+        log.info("[审批] 提交实例: instanceId={}, no={}, template={}, applicant={}, parent={}",
+                instance.getId(), instance.getInstanceNo(), template.getTemplateKey(), userId, parentInstanceId);
         return instance.getId();
+    }
+
+    private Map<String, Object> buildFacts(Map<String, Object> form, Map<String, Object> extra,
+                                           String bizType, Long userId) {
+        Map<String, Object> facts = new LinkedHashMap<>(form);
+        if (extra != null && !extra.isEmpty()) {
+            facts.putAll(toMap(extra));
+        }
+        facts.put("applicantId", userId);
+        facts.put("bizType", bizType);
+        return facts;
     }
 
     public InstanceDetailVO detail(Long instanceId) {
@@ -244,7 +328,32 @@ public class ApprovalInstanceService {
         }
     }
 
-    private String generateInstanceNo() {
-        return "AP" + INSTANCE_NO_FORMAT.format(LocalDateTime.now()) + RandomUtil.randomNumbers(6);
+    private Map<String, Object> parseForm(String formJson) {
+        if (StrUtil.isBlank(formJson)) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(formJson, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "审批表单快照解析失败");
+        }
+    }
+
+    /**
+     * 事务回滚时释放幂等占位，避免失败请求阻塞用户 5 分钟。
+     */
+    private void registerRollbackRelease(Long userId, String idempotencyKey) {
+        if (StrUtil.isBlank(idempotencyKey) || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    idempotencyGuard.release(userId, idempotencyKey);
+                }
+            }
+        });
     }
 }

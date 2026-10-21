@@ -11,6 +11,7 @@ import org.albedo.vllmpt.common.security.UserContextHolder;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateCreateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateDetailVO;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateNodeRequest;
+import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateUpdateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalTemplate;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalTemplateNode;
 import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalAssigneeType;
@@ -66,21 +67,7 @@ public class ApprovalTemplateService {
         template.setUpdatedAt(LocalDateTime.now());
         templateMapper.insert(template);
 
-        Set<String> nodeKeys = new HashSet<>();
-        Set<Integer> sortOrders = new HashSet<>();
-        List<TemplateNodeRequest> nodeRequests = request.getNodes();
-        for (int i = 0; i < nodeRequests.size(); i++) {
-            TemplateNodeRequest nodeRequest = nodeRequests.get(i);
-            String nodeKey = nodeRequest.getNodeKey().trim();
-            if (!nodeKeys.add(nodeKey)) {
-                throw new BusinessException(400, "节点 nodeKey 重复: " + nodeKey);
-            }
-            int sortOrder = nodeRequest.getSortOrder() == null ? i + 1 : nodeRequest.getSortOrder();
-            if (!sortOrders.add(sortOrder)) {
-                throw new BusinessException(400, "节点 sortOrder 重复: " + sortOrder);
-            }
-            nodeMapper.insert(toNode(template.getId(), nodeRequest, sortOrder));
-        }
+        saveNodes(template.getId(), request.getNodes());
 
         log.info("[审批] 创建模板: key={}, version={}, templateId={}",
                 template.getTemplateKey(), version, template.getId());
@@ -105,6 +92,59 @@ public class ApprovalTemplateService {
 
     public TemplateDetailVO detail(Long templateId) {
         return new TemplateDetailVO(requireTemplate(templateId), listNodes(templateId));
+    }
+
+    /**
+     * 编辑草稿模板：只允许 DRAFT，节点全量替换。
+     */
+    @Transactional
+    public void update(Long templateId, TemplateUpdateRequest request) {
+        ApprovalTemplate template = requireTemplate(templateId);
+        if (!ApprovalTemplateStatus.DRAFT.name().equals(template.getStatus())) {
+            throw new BusinessException(400, "只有草稿模板可以编辑");
+        }
+
+        template.setName(request.getName().trim());
+        template.setDescription(request.getDescription());
+        template.setFormSchema(writeJson(request.getFormSchema()));
+        if (request.getAiFillEnabled() != null) {
+            template.setAiFillEnabled(Boolean.TRUE.equals(request.getAiFillEnabled()) ? 1 : 0);
+        }
+        template.setUpdatedAt(LocalDateTime.now());
+        templateMapper.updateById(template);
+
+        nodeMapper.delete(Wrappers.<ApprovalTemplateNode>lambdaQuery()
+                .eq(ApprovalTemplateNode::getTemplateId, templateId));
+        saveNodes(templateId, request.getNodes());
+        log.info("[审批] 编辑草稿模板: templateId={}, key={}, version={}",
+                templateId, template.getTemplateKey(), template.getVersion());
+    }
+
+    /**
+     * 下线已发布模板：只影响新实例，运行中的实例固定引用原 templateId。
+     */
+    @Transactional
+    public void disable(Long templateId) {
+        ApprovalTemplate template = requireTemplate(templateId);
+        if (!ApprovalTemplateStatus.PUBLISHED.name().equals(template.getStatus())) {
+            throw new BusinessException(400, "只有已发布模板可以下线");
+        }
+        template.setStatus(ApprovalTemplateStatus.DISABLED.name());
+        template.setUpdatedAt(LocalDateTime.now());
+        templateMapper.updateById(template);
+        log.info("[审批] 下线模板: templateId={}, key={}, version={}",
+                templateId, template.getTemplateKey(), template.getVersion());
+    }
+
+    /**
+     * 按业务类型返回最新已发布模板的表单 Schema，供 AI 填表与前端动态渲染使用。
+     */
+    public String formSchema(String bizType) {
+        ApprovalTemplate template = findPublishedByBizType(bizType);
+        if (template == null) {
+            throw new BusinessException(404, "未找到已发布的审批模板: " + bizType);
+        }
+        return template.getFormSchema();
     }
 
     public List<ApprovalTemplate> list(String bizType) {
@@ -151,6 +191,23 @@ public class ApprovalTemplateService {
                 .eq(ApprovalTemplateNode::getTemplateId, templateId)
                 .orderByAsc(ApprovalTemplateNode::getSortOrder)
                 .orderByAsc(ApprovalTemplateNode::getId));
+    }
+
+    private void saveNodes(Long templateId, List<TemplateNodeRequest> nodeRequests) {
+        Set<String> nodeKeys = new HashSet<>();
+        Set<Integer> sortOrders = new HashSet<>();
+        for (int i = 0; i < nodeRequests.size(); i++) {
+            TemplateNodeRequest nodeRequest = nodeRequests.get(i);
+            String nodeKey = nodeRequest.getNodeKey().trim();
+            if (!nodeKeys.add(nodeKey)) {
+                throw new BusinessException(400, "节点 nodeKey 重复: " + nodeKey);
+            }
+            int sortOrder = nodeRequest.getSortOrder() == null ? i + 1 : nodeRequest.getSortOrder();
+            if (!sortOrders.add(sortOrder)) {
+                throw new BusinessException(400, "节点 sortOrder 重复: " + sortOrder);
+            }
+            nodeMapper.insert(toNode(templateId, nodeRequest, sortOrder));
+        }
     }
 
     private ApprovalTemplateNode toNode(Long templateId, TemplateNodeRequest request, int sortOrder) {

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.albedo.vllmpt.common.result.Result;
 import org.albedo.vllmpt.module.approval.core.domain.dto.CancelRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.InstanceDetailVO;
+import org.albedo.vllmpt.module.approval.core.domain.dto.ResubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.SubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalInstance;
 import org.albedo.vllmpt.module.approval.core.service.ApprovalInstanceService;
@@ -50,5 +51,15 @@ public class ApprovalInstanceController {
                                @RequestBody(required = false) CancelRequest request) {
         instanceService.cancel(id, request == null ? null : request.getReason());
         return Result.success();
+    }
+
+    /**
+     * 驳回后重新提交：沿用原模板与版本创建新实例，parent_instance_id 关联旧实例。
+     */
+    @PostMapping("/{id}/resubmit")
+    public Result<Long> resubmit(@PathVariable("id") Long id,
+                                 @RequestBody(required = false) ResubmitInstanceRequest request) {
+        return Result.success(instanceService.resubmit(
+                id, request == null ? new ResubmitInstanceRequest() : request));
     }
 }

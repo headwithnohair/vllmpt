@@ -52,6 +52,30 @@ public final class RedisKey {
         return SESSION_LOCK_PREFIX + sessionId;
     }
 
+    /** 审批单号序号前缀：approval:no:{bizType}:{yyyyMMdd}，每日每业务独立递增 */
+    public static final String APPROVAL_NO_PREFIX = "approval:no:";
+
+    /**
+     * 审批单号序号：approval:no:{bizType}:{yyyyMMdd}   String（计数器）
+     * <p>
+     * TTL 2 天；实例号格式 AP + yyyyMMdd + 6 位序号。
+     */
+    public static String approvalNo(String bizType, String yyyyMMdd) {
+        return APPROVAL_NO_PREFIX + bizType + ':' + yyyyMMdd;
+    }
+
+    /** 审批提交幂等前缀 */
+    public static final String APPROVAL_SUBMIT_IDEM_PREFIX = "approval:submit:idem:";
+
+    /**
+     * 审批提交幂等：approval:submit:idem:{userId}:{idempotencyKey}   String
+     * <p>
+     * 首次提交写入占位，成功后改成实例 ID；重复提交直接返回同一实例。TTL 5 分钟。
+     */
+    public static String approvalSubmitIdem(Long userId, String idempotencyKey) {
+        return APPROVAL_SUBMIT_IDEM_PREFIX + userId + ':' + idempotencyKey;
+    }
+
     /** 文件解析任务实时进度前缀（Hash） */
     public static final String FILE_TASK_PROGRESS_PREFIX = "ai:file:task:progress:";
 

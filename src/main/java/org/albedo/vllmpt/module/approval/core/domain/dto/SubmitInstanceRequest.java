@@ -26,4 +26,11 @@ public class SubmitInstanceRequest {
     private Map<String, Object> formData;
 
     private Map<String, Object> facts;
+
+    /**
+     * 提交幂等键（客户端生成，如 UUID）。
+     * <p>
+     * 5 分钟内使用同一 key 重复提交时，直接返回首次创建的实例 ID。
+     */
+    private String idempotencyKey;
 }
