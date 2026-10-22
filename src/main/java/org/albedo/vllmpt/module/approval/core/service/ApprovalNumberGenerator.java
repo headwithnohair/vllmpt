@@ -18,8 +18,8 @@ import java.util.concurrent.TimeUnit;
  * 审批单号生成器。
  * <p>
  * 单号格式：AP + yyyyMMdd + 6 位序号，例如 AP20261021000001。
- * 序号按「业务类型 + 日期」在 Redis 中原子递增，key 保留 2 天；
- * Redis 不可用时降级为「日期 + 6 位随机数」，保证审批主链路不被缓存故障阻断，
+ * 序号按日期在 Redis 中全局原子递增（不区分业务类型），保证 instance_no 全局唯一；
+ * key 保留 2 天。Redis 不可用时降级为「日期 + 6 位随机数」，保证审批主链路不被缓存故障阻断，
  * 极端情况下的冲突由 {@code uk_instance_no} 唯一键兜底。
  */
 @Slf4j
@@ -38,7 +38,7 @@ public class ApprovalNumberGenerator {
         String type = StrUtil.blankToDefault(bizType, "GENERAL").trim().toUpperCase(Locale.ROOT);
         String date = LocalDate.now().format(DATE_FORMAT);
         try {
-            RAtomicLong counter = redissonClient.getAtomicLong(RedisKey.approvalNo(type, date));
+            RAtomicLong counter = redissonClient.getAtomicLong(RedisKey.approvalNo(date));
             long seq = counter.incrementAndGet();
             if (seq == 1) {
                 counter.expire(COUNTER_TTL_DAYS, TimeUnit.DAYS);

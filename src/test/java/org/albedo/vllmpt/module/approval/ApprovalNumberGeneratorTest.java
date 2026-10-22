@@ -36,12 +36,12 @@ class ApprovalNumberGeneratorTest {
     }
 
     @Test
-    void generatesDailySequencePerBizType() {
-        when(redisson.getAtomicLong(RedisKey.approvalNo("LEAVE", today))).thenReturn(counter);
+    void generatesDailyGlobalSequenceAcrossBizTypes() {
+        when(redisson.getAtomicLong(RedisKey.approvalNo(today))).thenReturn(counter);
         when(counter.incrementAndGet()).thenReturn(1L, 2L);
 
         assertEquals("AP" + today + "000001", generator.next("LEAVE"));
-        assertEquals("AP" + today + "000002", generator.next("leave"));
+        assertEquals("AP" + today + "000002", generator.next("TRAVEL_EXPENSE"));
         verify(counter).expire(2, TimeUnit.DAYS);
     }
 
@@ -58,8 +58,8 @@ class ApprovalNumberGeneratorTest {
     }
 
     @Test
-    void blankBizTypeUsesGeneralBucket() {
-        when(redisson.getAtomicLong(RedisKey.approvalNo("GENERAL", today))).thenReturn(counter);
+    void blankBizTypeUsesSameDailyCounter() {
+        when(redisson.getAtomicLong(RedisKey.approvalNo(today))).thenReturn(counter);
         when(counter.incrementAndGet()).thenReturn(3L);
 
         assertEquals("AP" + today + "000003", generator.next(null));

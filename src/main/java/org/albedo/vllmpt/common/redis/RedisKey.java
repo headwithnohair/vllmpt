@@ -52,16 +52,18 @@ public final class RedisKey {
         return SESSION_LOCK_PREFIX + sessionId;
     }
 
-    /** 审批单号序号前缀：approval:no:{bizType}:{yyyyMMdd}，每日每业务独立递增 */
+    /** 审批单号序号前缀：approval:no:{yyyyMMdd}，全业务共享，保证 instance_no 全局唯一 */
     public static final String APPROVAL_NO_PREFIX = "approval:no:";
 
     /**
-     * 审批单号序号：approval:no:{bizType}:{yyyyMMdd}   String（计数器）
+     * 审批单号序号：approval:no:{yyyyMMdd}   String（计数器）
      * <p>
-     * TTL 2 天；实例号格式 AP + yyyyMMdd + 6 位序号。
+     * 不区分业务类型：单号格式为 AP + yyyyMMdd + 6 位序号，
+     * 若按业务类型分别计数，不同业务会生成相同单号而撞上 uk_instance_no。
+     * TTL 2 天。
      */
-    public static String approvalNo(String bizType, String yyyyMMdd) {
-        return APPROVAL_NO_PREFIX + bizType + ':' + yyyyMMdd;
+    public static String approvalNo(String yyyyMMdd) {
+        return APPROVAL_NO_PREFIX + yyyyMMdd;
     }
 
     /** 审批提交幂等前缀 */
