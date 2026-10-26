@@ -2,8 +2,11 @@ package org.albedo.vllmpt.module.chat.controller;
 
 
 import dev.langchain4j.model.output.TokenUsage;
+import cn.hutool.core.util.StrUtil;
+import org.albedo.vllmpt.common.enums.BizScene;
 import org.albedo.vllmpt.common.exception.BusinessException;
 import org.albedo.vllmpt.common.result.Result;
+import org.albedo.vllmpt.common.security.UserContextHolder;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipeline;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineExecutor;
@@ -217,11 +220,37 @@ public class ChatPiplineController {
         ctx.setAttribute("request", mpc);
         ctx.setAttribute("modelId", mpc.getModelName());
         ctx.setAttribute("sessionId", mpc.getSessionId());
+        ctx.setSessionId(mpc.getSessionId());
+        ctx.setUserId(resolveUserIdLong(mpc));
+        ctx.setBizType(StrUtil.trim(mpc.getBizType()));
+        if (StrUtil.isNotBlank(ctx.getBizType())) {
+            // 审批场景：专用提示词 + 只暴露 approval 工具组
+            ctx.setBizScene(BizScene.APPROVAL);
+            ctx.setToolGroup("approval");
+        }
         if (mpc.getAttachments() != null) {
             ctx.setAttachments(mpc.getAttachments());
         }
         ctx.setAttribute("text", mpc.getText());
         return ctx;
+    }
+
+    /**
+     * 工具与审批服务使用的真实用户 ID：优先请求头解析结果，其次请求体 userId。
+     */
+    private Long resolveUserIdLong(MultimodalChatRequest mpc) {
+        Long current = UserContextHolder.getUserId();
+        if (current != null) {
+            return current;
+        }
+        if (mpc != null && StrUtil.isNotBlank(mpc.getUserId())) {
+            try {
+                return Long.valueOf(mpc.getUserId().trim());
+            } catch (NumberFormatException ignored) {
+                // 非数字 userId 只用于并发标识，不作为业务用户
+            }
+        }
+        return null;
     }
 
     /**

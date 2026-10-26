@@ -99,7 +99,7 @@
 |------|------|------|
 | MySQL | 8.0 | 业务关系数据 |
 | Redis | 7.x（Redisson 4.4.0） | 会话记忆、限流计数、会话锁、配额计数 |
-| RabbitMQ | amqp-client 5.30.0 | 异步任务（已配置，消费端待落地） |
+| RocketMQ | rocketmq-spring-boot-starter 2.3.6 | 异步任务（文件解析流水线 / 延迟消息 / 死信） |
 | Elasticsearch | 9.4.1 客户端 | 日志检索（规划） |
 | MinIO | 8.5.7 SDK | 对象存储（图片 / 文档） |
 | Chroma | latest | 向量数据库（知识库 / 用户画像双 Collection） |
@@ -152,7 +152,7 @@
         │              │              │
 ┌───────▼──────────────▼──────────────▼─────────────────────────┐
 │  数据与中间件层                                                 │
-│  MySQL │ Redis │ RabbitMQ │ MinIO │ Chroma │ Elasticsearch     │
+│  MySQL │ Redis │ RocketMQ │ MinIO │ Chroma │ Elasticsearch     │
 └───────────────────────────┬──────────────────────────────────┘
                             │ OpenAI 兼容协议
 ┌───────────────────────────▼──────────────────────────────────┐
@@ -168,14 +168,15 @@
 vllmpt/
 ├── doc/                              # 项目文档与 Docker 环境编排
 │   ├── docker/
-│   │   ├── docker-compose-env.yml    # 8 个基础服务编排
+│   │   ├── docker-compose-env.yml    # 基础服务编排
 │   │   ├── init_chroma.py            # Chroma 初始化脚本
 │   │   ├── README.md                 # Docker 环境使用说明
-│   │   ├── mysql/  elasticsearch/  logstash/   # 各服务挂载配置
-│   ├── 项目概览.md
+│   │   ├── mysql/  elasticsearch/  logstash/  rocketmq/   # 各服务挂载配置
+│   ├── sql/                          # 建表脚本（审批 / 文件任务 / Token 配额）
+│   ├── 需求文档.md                   # 唯一需求基线（场景 + 审批平台）
+│   ├── 接口文档.md                   # 全项目接口契约
+│   ├── 审批业务链路说明.md           # 审批实现链路与时序
 │   ├── 配置说明.md
-│   ├── project_improvement_plan.md
-│   ├── 每日Token配额方案.md
 │   ├── 并发限制练习指南.md
 │   └── 会话互斥练习指南.md
 ├── src/
@@ -211,11 +212,10 @@ vllmpt/
 │       └── java/org/albedo/vllmpt/             # 单元测试
 ├── pom.xml
 ├── mvnw / mvnw.cmd
-├── AI Agent后端项目文档.md
 └── ReadMe.md
 ```
 
-> 待补充：`application-test.yml`、`application-prod.yml`（`doc/配置说明.md` 中有描述，仓库中尚未提供）；`doc/sql/`（`doc/每日Token配额方案.md` 引用的建表脚本 `init_user_quota.sql` 未包含在仓库中）。
+> 待补充：`application-test.yml`、`application-prod.yml`（`doc/配置说明.md` 中有描述，仓库中尚未提供）。
 
 ---
 
@@ -237,7 +237,7 @@ cd vllmpt
 
 ### 2. 启动依赖服务
 
-项目提供了一键编排的基础服务（MySQL / Redis / RabbitMQ / Elasticsearch / Kibana / Logstash / MinIO / Chroma）：
+项目提供了一键编排的基础服务（MySQL / Redis / RocketMQ / Elasticsearch / Kibana / Logstash / MinIO / Chroma）：
 
 ```bash
 cd doc/docker
@@ -252,7 +252,9 @@ docker compose -f docker-compose-env.yml ps
 |------|------|------------|
 | MySQL | 3306 | `root` / `root123`（库：`vllmpt_dev`） |
 | Redis | 6379 | 密码 `redis123` |
-| RabbitMQ | 5672 / 15672 | `guest` / `guest` |
+| RocketMQ NameServer | 9876 | - |
+| RocketMQ Broker | 10911 | - |
+| RocketMQ Dashboard | 8180 | - |
 | Elasticsearch | 9200 | 安全认证关闭 |
 | Kibana | 5601 | - |
 | Logstash | 5044 / 9600 | - |
@@ -322,8 +324,8 @@ curl -N -X POST http://localhost:8080/api/pipline/stream \
 | `spring.profiles.active` | application.yml | 激活的环境，默认 `dev` |
 | `spring.datasource.*` | application-dev.yml | MySQL 连接与 HikariCP 连接池 |
 | `spring.data.redis.*` | application-dev.yml | Redis 连接与 Lettuce 连接池 |
-| `spring.rabbitmq.*` | application-dev.yml | RabbitMQ 连接、手动 ack、prefetch、并发与重试 |
-| `spring.servlet.multipart.*` | application.yml | 文件上传限制（单文件 50MB / 请求 100MB） |
+| `rocketmq.*` | application-dev.yml | RocketMQ NameServer、生产者组、发送超时与重试 |
+| `spring.servlet.multipart.*` | application.yml | 文件上传限制（单文件 500MB / 请求 520MB） |
 | `mybatis-plus.*` | application.yml | Mapper 位置、驼峰映射、逻辑删除字段 `deleted` |
 | `springdoc.*` | application.yml / dev | Swagger / OpenAPI 开关 |
 | `management.*` | application.yml / dev | Actuator 端点暴露与 Prometheus 指标 |
@@ -331,6 +333,10 @@ curl -N -X POST http://localhost:8080/api/pipline/stream \
 | `ai.routing.strategy` | application.yml | 路由策略（`PRIORITY` / `COST_OPTIMIZED` / `PERFORMANCE` / `LOAD_BALANCE`） |
 | `ai.fallback.*` | application.yml | 降级重试配置（`max-retries` / `retry-delay`） |
 | `ai.concurrent.*` | application-dev.yml | 单用户并发推理限制（`limit` / `window-seconds` / `key-ttl-seconds`） |
+| `ai.quota.*` | application-dev.yml | 每日 Token 配额（预估扣减、默认额度、缓存与计数器 TTL） |
+| `app.identity.*` | application-dev.yml | 开发期身份（`X-User-Id` 缺失时的默认用户） |
+| `app.file-task.*` | application-dev.yml | 大文件任务进度 TTL 与阶段超时 |
+| `app.alert.*` | application-dev.yml | 钉钉/飞书告警 webhook |
 | `langchain4j.open-ai.chat-model.*` | application.yml / dev | 对话模型（base-url / api-key / model-name / timeout / temperature / max-tokens） |
 | `langchain4j.open-ai.embedding-model.*` | application-dev.yml | 向量模型（`BAAI/bge-m3`，dimension 1024） |
 | `langchain4j.open-ai.reranker-model.*` | application-dev.yml | 重排模型（`BAAI/bge-reranker-v2-m3`） |
@@ -358,62 +364,37 @@ curl -N -X POST http://localhost:8080/api/pipline/stream \
 
 ## API 接口说明
 
-> 统一前缀 `/api`；统一响应体 `Result<T>{code, message, data}`；成功码 `200`。
+> 完整接口契约（请求/响应字段、错误码、示例）见 [doc/接口文档.md](./doc/接口文档.md)，本节只保留入口索引。
+> 统一响应体 `Result<T>{code, message, data}`；业务错误同样以 HTTP 200 返回，客户端需判断 `code`。
 
-### 多模态对话
+| 模块 | 主要路径 | 说明 |
+|------|---------|------|
+| 对话 | `/api/chat/multimodal/*`、`/api/pipline/*` | 多模态对话、同步与 SSE Pipeline；传 `bizType` 进入审批填表 |
+| 检索 | `/api/hybrid/search` | 混合检索（BM25 + 向量 + RRF，核心 TODO） |
+| 文件 | `/api/file/*`、`/api/indexAction/*` | 预签名上传、异步解析任务、同步入库 |
+| 审批-模板 | `/api/approval/template/*` | 创建 / 编辑 / 发布 / 下线 / Schema / 详情 / 列表 |
+| 审批-实例 | `/api/approval/instance/*` | 提交 / 详情 / 我的申请 / 撤回 / 重新提交 |
+| 审批-任务 | `/api/approval/task/*` | 待办 / 详情 / 同意 / 拒绝 |
+| 审批-抄送 | `/api/approval/cc/*` | 抄送我的 / 标记已读 |
+| 审批-草稿 | `/api/approval/draft` | 填表草稿保存/查询/删除（含缺失字段） |
+| 审批-请假 | `/api/leave/*` | 请假提交/详情/我的/撤回/余额 |
+| 运维 | `/stat/*`、`/actuator/*` | 自检与监控 |
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/chat/multimodal/multiple` | 同步多模态对话（含 ReAct 工具调用），返回 `{response}` |
-| POST | `/api/chat/multimodal/stream` | SSE 流式对话（`text/event-stream`，`[DONE]` 结束） |
-| POST | `/api/chat/multimodal/easyReply` | 占位接口（当前返回空，未实现） |
-| POST | `/api/chat/multimodal/upload-and-chat` | 图片直传（multipart）+ 对话，当前仅返回上传后的 `imageUrl` |
+常见业务码：`400` 参数/状态不允许、`402` Token 额度不足、`403` 越权、`404` 不存在、`409` 状态已变化/会话占用、`429` 并发超限/审批处理中、`505` 流水线中断。
 
-对话请求体 `MultimodalChatRequest`：
+快速验证：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `sessionId` | String | 会话 ID（记忆与锁的标识） |
-| `text` | String | 用户输入文本 |
-| `attachments` | List\<Attachment\> | 附件列表（`type`/`url`/`name`） |
-| `modelName` | String | 指定模型，为空使用默认 |
-| `temperature` | Double | 温度（归一化到 0.1 步长） |
-| `maxTokens` | Integer | 最大 Token（归一化到 1024 倍数） |
-| `isStream` | Boolean | 是否流式（接口另有区分） |
+```bash
+# 同步 Pipeline 对话
+curl -X POST http://localhost:8080/api/pipline/fack \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"s1","text":"你好","modelName":"Qwen/Qwen3.6-35B-A3B"}'
 
-### Pipeline 对话
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/pipline/fack` | 同步 Pipeline 对话，返回 `Result<String>` |
-| POST | `/api/pipline/stream` | SSE 流式 Pipeline 对话（`[DONE]` 结束） |
-
-- 并发超额返回 `code=429`（「您的并发请求过多，请稍后重试」）；
-- 会话占用返回 `code=409`（「该会话正在处理中，请稍候再试」，仅 `/fack`；`/stream` 推 `[ERROR]` 帧）。
-
-### 知识库 / 文件向量化
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/indexAction/file` | 文件入库（校验 + 迁移 + 解析 + 向量化），返回归档对象名 |
-| POST | `/api/indexAction/indexString` | 纯文本直接向量化入库 |
-| POST | `/api/indexAction/searchEmbd` | 语义检索（调试用，日志输出结果） |
-| POST | `/api/indexAction/DownloadFile` | 对象存储文件流式处理 |
-
-### 文件上传
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/file/upload/UploadUrl` | 获取 MinIO 预签名上传 URL（`PUT`，5 分钟有效），返回 `{objectName, presignedUrl}` |
-| POST | `/api/file/upload/image` | multipart 图片上传（≤10MB），返回 `{url}` |
-| POST | `/api/file/upload/from-url` | 外链图片转存 MinIO，返回 `{url}` |
-
-### 自检
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/stat/errorTest` | 返回固定错误响应 |
-| POST | `/stat/errorTest2` | 抛出 `BusinessException` 验证全局异常处理 |
+# SSE 流式对话
+curl -N -X POST http://localhost:8080/api/pipline/stream \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"s1","text":"写一段产品简介"}'
+```
 
 ---
 
@@ -471,7 +452,11 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 - Redis 会话记忆、模型工厂（含实例缓存与参数归一化）；
 - Pipeline-Stage 编排框架；
 - 并发限制与会话互斥；
-- MinIO 预签名直传、ETag 校验、桶迁移、并发/磁盘保护。
+- MinIO 预签名直传、ETag 校验、桶迁移、并发/磁盘保护；
+- 通用审批平台 P0：模板 CRUD/发布/下线、实例提交与重新提交、ANY/ALL/SEQUENTIAL、条件跳过、抄送查询/已读、Redis 单号与提交幂等；
+- 审批 P1：`ApprovalBizHandler` SPI、请假业务插件（工作日/半天、余额锁定与结算、时间重叠/病假证明校验）、Redis 填表草稿、请假业务接口；
+- 审批 P2：AI 填表（`bizType` 路由、审批提示词、`approval` 工具组、草稿/提交/查询/撤回工具）；
+- RocketMQ 大文件解析基础设施：生产者、台账、文本解析、DLQ 消费者。
 
 ### 开发中 / 未完成（以代码注释与文档为准）
 
@@ -485,7 +470,10 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 | 附件处理器注册 | `AttachmentProcessorRegistry` 目前仅注册 `image` |
 | 模型智能路由 | `ModelRegistry` 为空类，路由策略未落地 |
 | 对话摘要压缩 | 规划中，窗口满 10 条后由小模型总结 |
-| 异步任务 | RabbitMQ 已配置，消费端拓扑待落地 |
+| 文件异步入库 | 生产者/台账/文本解析/DLQ 已完成；向量化消费者与超时检查为骨架，进度 SSE 未开发 |
+| 混合检索 | ES 索引与双写门面就绪；`bm25Search` / `rrfFuse` 仍为 TODO（接口返回 500） |
+| 审批平台 P3+ | P0–P2 已完成：引擎、SPI/请假、AI 填表；AI 决策（P3）、差旅费/会议室业务未开始 |
+| 主动取消 | S3 设计完成，未开工 |
 | 多环境 | 仅有 dev，test/prod 配置缺失 |
 
 ---
@@ -560,12 +548,12 @@ fix(rag): 修复分块边界丢字问题
 
 ## 相关文档
 
-- [AI Agent 后端项目文档](./AI%20Agent后端项目文档.md) —— 完整架构与实现说明
-- [项目概览](./doc/项目概览.md)
+- [需求文档](./doc/需求文档.md) —— 唯一需求基线（通用场景 + 审批平台）
+- [接口文档](./doc/接口文档.md) —— 全项目接口契约
+- [审批业务链路说明](./doc/审批业务链路说明.md) —— 审批实现链路、事务与并发
 - [配置说明](./doc/配置说明.md)
-- [项目改进方案](./doc/project_improvement_plan.md)
 - [Docker 环境说明](./doc/docker/README.md)
 
 ---
 
-<p align="right">最后更新：2026-10-07</p>
+<p align="right">最后更新：2026-10-26</p>

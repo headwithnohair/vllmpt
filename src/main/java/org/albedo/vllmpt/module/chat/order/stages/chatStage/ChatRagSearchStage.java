@@ -5,6 +5,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.rag.content.Content;
 import lombok.extern.slf4j.Slf4j;
+import org.albedo.vllmpt.common.enums.BizScene;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineStage;
 import org.albedo.vllmpt.module.chat.service.impl.KnowledgeBaseRagServiceImpl;
@@ -42,9 +43,12 @@ public class ChatRagSearchStage implements ChatPipelineStage<ChatPipelineContext
         context.setSystemMessage(SystemMessage.from(buildSystemPromptWithContent(list)));
     }
 
-    /** 没有用户文本时无需检索 */
+    /** 没有用户文本或审批场景无需检索 */
     @Override
     public boolean shouldExecute(ChatPipelineContext context) {
+        if (context.getBizScene() == BizScene.APPROVAL) {
+            return false;
+        }
         Object text = context.getAttribute("text");
         return text != null && StringUtils.hasText(text.toString());
     }

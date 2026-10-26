@@ -19,6 +19,8 @@ import org.albedo.vllmpt.module.approval.core.engine.condition.JsonConditionEval
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalInstanceMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTaskMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTemplateNodeMapper;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalBizHandler;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalBizRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +50,7 @@ public class ApprovalEngine {
     private final ApprovalTaskMapper taskMapper;
     private final JsonConditionEvaluator conditionEvaluator;
     private final ObjectMapper objectMapper;
+    private final ApprovalBizRegistry bizRegistry;
     private final Map<ApprovalNodeType, NodeHandler> handlerMap;
 
     public ApprovalEngine(ApprovalInstanceMapper instanceMapper,
@@ -55,12 +58,14 @@ public class ApprovalEngine {
                           ApprovalTaskMapper taskMapper,
                           JsonConditionEvaluator conditionEvaluator,
                           ObjectMapper objectMapper,
+                          ApprovalBizRegistry bizRegistry,
                           List<NodeHandler> handlers) {
         this.instanceMapper = instanceMapper;
         this.nodeMapper = nodeMapper;
         this.taskMapper = taskMapper;
         this.conditionEvaluator = conditionEvaluator;
         this.objectMapper = objectMapper;
+        this.bizRegistry = bizRegistry;
         this.handlerMap = handlers.stream()
                 .collect(Collectors.toMap(NodeHandler::supportType, handler -> handler,
                         (left, right) -> left, () -> new EnumMap<>(ApprovalNodeType.class)));
@@ -186,8 +191,33 @@ public class ApprovalEngine {
                 .set(ApprovalInstance::getCurrentNodeName, nodeName)
                 .set(ApprovalInstance::getFinishedAt, now));
         cancelOpenTasks(instance.getId(), now);
+        instance.setStatus(status.name());
+        applyBizResult(instance, status);
         log.info("[审批] 流程结束: instanceId={}, status={}, node={}, comment={}",
                 instance.getId(), status, nodeKey, comment);
+    }
+
+    /**
+     * 审批结果回调：事务内执行，失败会回滚整个审批事务。
+     */
+    private void applyBizResult(ApprovalInstance instance, ApprovalInstanceStatus status) {
+        ApprovalBizHandler handler = bizRegistry.find(instance.getBizType());
+        if (handler == null) {
+            return;
+        }
+        handler.applyResult(instance, status);
+        try {
+            switch (status) {
+                case APPROVED -> handler.onApproved(instance);
+                case REJECTED -> handler.onRejected(instance);
+                default -> {
+                    // 目前引擎只会以通过/拒绝结束
+                }
+            }
+        } catch (Exception e) {
+            log.error("[审批] 业务生命周期回调失败: instanceId={}, status={}, handler={}",
+                    instance.getId(), status, handler.getClass().getSimpleName(), e);
+        }
     }
 
     private void cancelOpenTasks(Long instanceId, LocalDateTime now) {

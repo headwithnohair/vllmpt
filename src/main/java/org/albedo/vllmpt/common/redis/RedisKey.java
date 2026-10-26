@@ -68,7 +68,6 @@ public final class RedisKey {
 
     /** 审批提交幂等前缀 */
     public static final String APPROVAL_SUBMIT_IDEM_PREFIX = "approval:submit:idem:";
-
     /**
      * 审批提交幂等：approval:submit:idem:{userId}:{idempotencyKey}   String
      * <p>
@@ -76,6 +75,18 @@ public final class RedisKey {
      */
     public static String approvalSubmitIdem(Long userId, String idempotencyKey) {
         return APPROVAL_SUBMIT_IDEM_PREFIX + userId + ':' + idempotencyKey;
+    }
+
+    /** 审批填表草稿前缀 */
+    public static final String APPROVAL_DRAFT_PREFIX = "approval:draft:";
+
+    /**
+     * 审批填表草稿：approval:draft:{userId}:{bizType}:{sessionId}   String(JSON)
+     * <p>
+     * TTL 30 分钟；只存表单与缺失字段，不进入正式审批表。
+     */
+    public static String approvalDraft(Long userId, String bizType, String sessionId) {
+        return APPROVAL_DRAFT_PREFIX + userId + ':' + bizType + ':' + sessionId;
     }
 
     /** 文件解析任务实时进度前缀（Hash） */

@@ -40,6 +40,9 @@ public class MultimodalChatRequest {
     /** 指定模型名称，为空则使用默认 */
     private String modelName;
 
+    /** 审批业务类型（如 LEAVE）；有值时进入审批填表场景，只暴露 approval 工具组 */
+    private String bizType;
+
     /** 温度，为空则使用默认 */
     private Double temperature;
 

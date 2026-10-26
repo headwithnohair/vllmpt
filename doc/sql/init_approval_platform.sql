@@ -232,7 +232,7 @@ ON DUPLICATE KEY UPDATE `role_code` = VALUES(`role_code`);
 
 
 -- ------------------------------------------
--- 演示模板 1：请假
+-- 演示模板 1：请假（P1 请假业务插件接管校验与余额）
 -- START → AI_DECISION → 直属主管(ANY) → CC(HR) → END
 -- AI 决策未接入时 P0 固定走转人工分支
 -- ------------------------------------------
@@ -240,8 +240,8 @@ INSERT INTO `approval_template`
   (`id`, `template_key`, `biz_type`, `name`, `version`, `status`, `form_schema`, `description`, `ai_fill_enabled`, `created_by`, `deleted`)
 VALUES
   (1, 'leave', 'LEAVE', '请假申请', 1, 'PUBLISHED',
-   '{"fields":[{"name":"leaveType","label":"请假类型","type":"STRING","required":true},{"name":"startDate","label":"开始日期","type":"DATE","required":true},{"name":"endDate","label":"结束日期","type":"DATE","required":true},{"name":"days","label":"请假天数","type":"NUMBER","required":true},{"name":"reason","label":"请假事由","type":"STRING","required":true}]}',
-   '演示模板：AI 决策兜底转直属主管', 1, 1, 0)
+   '{"fields":[{"name":"leaveType","label":"请假类型","type":"STRING","required":true},{"name":"startTime","label":"开始时间","type":"STRING","required":true},{"name":"endTime","label":"结束时间","type":"STRING","required":true},{"name":"reason","label":"请假事由","type":"STRING","required":true},{"name":"attachmentUrls","label":"证明材料","type":"ARRAY","required":false}]}',
+   'P1 请假业务：工作日/半天计算、余额锁定、时间冲突校验', 1, 1, 0)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`), `form_schema` = VALUES(`form_schema`);
 
 INSERT INTO `approval_template_node`

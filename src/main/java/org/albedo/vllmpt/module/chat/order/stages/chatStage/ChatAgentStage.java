@@ -11,10 +11,14 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.TokenUsage;
+import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.albedo.vllmpt.common.security.UserContextHolder;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineStage;
 import org.albedo.vllmpt.module.ai.service.ChatModelFactory;
+import org.albedo.vllmpt.module.chat.tool.ToolContext;
+import org.albedo.vllmpt.module.chat.tool.ToolContextHolder;
 import org.albedo.vllmpt.module.chat.tool.ToolRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -47,6 +51,26 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
 
     @Override
     public void execute(ChatPipelineContext context) {
+        Long previousUser = UserContextHolder.getUserId();
+        if (context.getUserId() != null) {
+            UserContextHolder.setUserId(context.getUserId());
+        }
+        ToolContextHolder.set(new ToolContext(context.getUserId(), context.getSessionId(),
+                context.getBizType(), context.getToolGroup()));
+        try {
+            doExecute(context);
+        } finally {
+            // 工具上下文与用户上下文都按线程生命周期清理，避免线程池复用串号
+            ToolContextHolder.clear();
+            if (previousUser == null) {
+                UserContextHolder.clear();
+            } else {
+                UserContextHolder.setUserId(previousUser);
+            }
+        }
+    }
+
+    private void doExecute(ChatPipelineContext context) {
 
         List<ChatMessage> sourceMessages = context.getAllMessages();
         if (sourceMessages == null || sourceMessages.isEmpty()) {
@@ -67,7 +91,12 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
                     context.getModelName(), context.getTemperature(), context.getMaxTokens());
         }
 
-        List<ToolSpecification> specs = toolRegistry.allSpecs();
+        List<ToolSpecification> specs = toolRegistry.specsByGroup(
+                StrUtil.isBlank(context.getToolGroup()) ? "public" : context.getToolGroup().trim());
+        if (specs.isEmpty() && StrUtil.isBlank(context.getToolGroup())) {
+            // 兼容历史数据：没有分组时退回全量工具
+            specs = toolRegistry.allSpecs();
+        }
 
         List<ChatMessage> messages = new ArrayList<>(sourceMessages);
         AiMessage finalResult = null;

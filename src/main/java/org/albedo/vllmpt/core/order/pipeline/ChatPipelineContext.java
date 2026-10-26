@@ -6,6 +6,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import lombok.Data;
+import org.albedo.vllmpt.common.enums.BizScene;
 import org.albedo.vllmpt.module.chat.model.entity.Attachment;
 
 import java.util.ArrayList;
@@ -52,6 +53,21 @@ public class ChatPipelineContext<T> implements  PipelineContext {
 
     /** 本次推理请求的唯一 ID，用于释放并发额度（ZSet 的 member） */
     private String requestId;
+
+    /** 当前用户 ID（来自 X-User-Id / 默认用户），供工具执行与业务服务使用 */
+    private Long userId;
+
+    /** 会话 ID（同时保留在 attributes 中，兼容历史 Stage） */
+    private String sessionId;
+
+    /** 请求指定的业务类型，如 LEAVE；有值时进入审批场景 */
+    private String bizType;
+
+    /** 业务场景，决定系统提示词与工具分组 */
+    private BizScene bizScene;
+
+    /** 本次对话暴露的工具分组，如 approval；为空时使用 public */
+    private String toolGroup;
 
     /** 模型控制参数 */
     private String modelName;

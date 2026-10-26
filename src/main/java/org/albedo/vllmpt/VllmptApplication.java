@@ -21,7 +21,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "org.albedo.vllmpt.module.user.mapper",
         "org.albedo.vllmpt.module.quota.mapper",
         "org.albedo.vllmpt.module.file.mapper",
-        "org.albedo.vllmpt.module.approval.core.mapper"
+        "org.albedo.vllmpt.module.approval.core.mapper",
+        "org.albedo.vllmpt.module.approval.biz.leave.mapper"
 })
 public class VllmptApplication {
 

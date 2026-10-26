@@ -7,7 +7,9 @@ import dev.langchain4j.memory.ChatMemory;
 import lombok.extern.slf4j.Slf4j;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineContext;
 import org.albedo.vllmpt.core.order.pipeline.ChatPipelineStage;
+import org.albedo.vllmpt.module.approval.ai.ApprovalPromptBuilder;
 import org.albedo.vllmpt.module.chat.model.dto.MultimodalChatRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,6 +23,9 @@ import java.util.List;
 @Slf4j
 @Component
 public class ChatLoadInfoStage implements ChatPipelineStage<ChatPipelineContext> {
+
+    @Autowired
+    private ApprovalPromptBuilder approvalPromptBuilder;
 
     private static final SystemMessage DEFAULT_SYSTEM_MESSAGE = SystemMessage.from("""
             你是一个智能助手，请根据你的知识回答用户问题。
@@ -43,6 +48,17 @@ public class ChatLoadInfoStage implements ChatPipelineStage<ChatPipelineContext>
         if (!StringUtils.hasText(context.getModelName())) {
             context.interrupt("未指定模型名称");
             return;
+        }
+
+        // 审批场景覆盖默认/知识库提示词，注入当前业务的表单 Schema 与工具规则
+        if (StringUtils.hasText(context.getBizType())) {
+            try {
+                context.setSystemMessage(SystemMessage.from(
+                        approvalPromptBuilder.build(context.getBizType())));
+            } catch (RuntimeException e) {
+                context.interrupt("加载审批模板失败：" + e.getMessage());
+                return;
+            }
         }
 
         // 2. 用户消息必须有

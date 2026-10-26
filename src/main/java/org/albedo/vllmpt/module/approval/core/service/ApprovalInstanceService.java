@@ -29,6 +29,11 @@ import org.albedo.vllmpt.module.approval.core.mapper.ApprovalInstanceMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalRecordMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTaskMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTemplateMapper;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalBizHandler;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalBizRegistry;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalContext;
+import org.albedo.vllmpt.module.approval.core.spi.ApprovalForm;
+import org.albedo.vllmpt.module.approval.core.spi.ValidationResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -58,6 +63,7 @@ public class ApprovalInstanceService {
     private final ObjectMapper objectMapper;
     private final ApprovalNumberGenerator numberGenerator;
     private final ApprovalIdempotencyGuard idempotencyGuard;
+    private final ApprovalBizRegistry bizRegistry;
 
     /**
      * 提交审批：创建实例、写提交流水、启动流程，全部在同一事务内。
@@ -79,8 +85,10 @@ public class ApprovalInstanceService {
             Map<String, Object> form = toMap(request.getFormData());
             formSchemaValidator.validate(template.getFormSchema(), form);
             Map<String, Object> facts = buildFacts(form, request.getFacts(), template.getBizType(), userId);
+            ApprovalBizHandler handler = bizRegistry.find(template.getBizType());
+            Long bizId = prepareBizRecord(handler, template, form, facts, userId);
 
-            Long instanceId = createAndStart(template, form, facts,
+            Long instanceId = createAndStart(template, form, facts, bizId, handler,
                     StrUtil.blankToDefault(request.getTitle(), template.getName()),
                     null, 1, ApprovalAction.SUBMIT, null, userId);
             idempotencyGuard.complete(userId, idempotencyKey, instanceId);
@@ -127,9 +135,11 @@ public class ApprovalInstanceService {
                     : toMap(request.getFormData());
             formSchemaValidator.validate(template.getFormSchema(), form);
             Map<String, Object> facts = buildFacts(form, request.getFacts(), template.getBizType(), userId);
+            ApprovalBizHandler handler = bizRegistry.find(template.getBizType());
+            Long bizId = prepareBizRecord(handler, template, form, facts, userId);
 
             int submitCount = parent.getSubmitCount() == null ? 2 : parent.getSubmitCount() + 1;
-            Long newInstanceId = createAndStart(template, form, facts,
+            Long newInstanceId = createAndStart(template, form, facts, bizId, handler,
                     StrUtil.blankToDefault(request.getTitle(), parent.getTitle()),
                     parent.getId(), submitCount, ApprovalAction.RESUBMIT,
                     "重新提交，原实例 " + parent.getInstanceNo(), userId);
@@ -145,13 +155,14 @@ public class ApprovalInstanceService {
     }
 
     private Long createAndStart(ApprovalTemplate template, Map<String, Object> form,
-                                Map<String, Object> facts, String title, Long parentInstanceId,
+                                Map<String, Object> facts, Long bizId, ApprovalBizHandler handler,
+                                String title, Long parentInstanceId,
                                 int submitCount, ApprovalAction action, String comment, Long userId) {
         LocalDateTime now = LocalDateTime.now();
         ApprovalInstance instance = new ApprovalInstance();
         instance.setInstanceNo(numberGenerator.next(template.getBizType()));
         instance.setBizType(template.getBizType());
-        instance.setBizId(0L);
+        instance.setBizId(bizId == null ? 0L : bizId);
         instance.setTemplateId(template.getId());
         instance.setTemplateVersion(template.getVersion());
         instance.setApplicantId(userId);
@@ -167,11 +178,53 @@ public class ApprovalInstanceService {
         instance.setUpdatedAt(now);
         instanceMapper.insert(instance);
 
+        if (handler != null && bizId != null && bizId > 0) {
+            handler.bindInstance(bizId, instance.getId());
+        }
         saveRecord(instance, null, null, userId, ApprovalOperatorType.USER, action, comment);
         engine.start(instance.getId());
-        log.info("[审批] 提交实例: instanceId={}, no={}, template={}, applicant={}, parent={}",
-                instance.getId(), instance.getInstanceNo(), template.getTemplateKey(), userId, parentInstanceId);
+
+        ApprovalInstance latest = instanceMapper.selectById(instance.getId());
+        ApprovalInstance callbackInstance = latest == null ? instance : latest;
+        runLifecycle("onSubmitted", handler, () -> handler.onSubmitted(callbackInstance));
+        log.info("[审批] 提交实例: instanceId={}, no={}, template={}, applicant={}, parent={}, bizId={}",
+                instance.getId(), instance.getInstanceNo(), template.getTemplateKey(), userId, parentInstanceId, bizId);
         return instance.getId();
+    }
+
+    /**
+     * 业务插件校验 + 创建业务记录 + 合并业务事实。
+     * <p>
+     * 未注册插件的业务类型返回 0，按纯通用审批运行。
+     */
+    private Long prepareBizRecord(ApprovalBizHandler handler, ApprovalTemplate template,
+                                  Map<String, Object> form, Map<String, Object> facts, Long userId) {
+        if (handler == null) {
+            return 0L;
+        }
+        ApprovalForm bizForm = new ApprovalForm(template.getBizType(), form);
+        ApprovalContext ctx = new ApprovalContext(userId, template.getBizType(), null, facts);
+        ValidationResult validation = handler.validate(bizForm, ctx);
+        if (!validation.valid()) {
+            throw new BusinessException(400, String.join("；", validation.errors()));
+        }
+        Long bizId = handler.createBizRecord(bizForm, ctx);
+        Map<String, Object> bizFacts = handler.extractFacts(bizForm, ctx);
+        if (bizFacts != null && !bizFacts.isEmpty()) {
+            facts.putAll(bizFacts);
+        }
+        return bizId == null ? 0L : bizId;
+    }
+
+    private void runLifecycle(String action, ApprovalBizHandler handler, Runnable callback) {
+        if (handler == null) {
+            return;
+        }
+        try {
+            callback.run();
+        } catch (Exception e) {
+            log.error("[审批] 业务回调失败: action={}, handler={}", action, handler.getClass().getSimpleName(), e);
+        }
     }
 
     private Map<String, Object> buildFacts(Map<String, Object> form, Map<String, Object> extra,
@@ -207,11 +260,20 @@ public class ApprovalInstanceService {
     }
 
     public List<ApprovalInstance> my(String status, int limit) {
+        return my(null, status, limit);
+    }
+
+    /**
+     * @param bizType 可选，按业务类型过滤
+     */
+    public List<ApprovalInstance> my(String bizType, String status, int limit) {
         Long userId = UserContextHolder.requireUserId();
         int size = Math.min(Math.max(limit, 1), 100);
         String statusValue = StrUtil.isBlank(status) ? null : status.trim().toUpperCase();
+        String bizTypeValue = StrUtil.isBlank(bizType) ? null : bizType.trim().toUpperCase();
         return instanceMapper.selectList(Wrappers.<ApprovalInstance>lambdaQuery()
                 .eq(ApprovalInstance::getApplicantId, userId)
+                .eq(bizTypeValue != null, ApprovalInstance::getBizType, bizTypeValue)
                 .eq(statusValue != null, ApprovalInstance::getStatus, statusValue)
                 .orderByDesc(ApprovalInstance::getId)
                 .last("LIMIT " + size));
@@ -254,6 +316,13 @@ public class ApprovalInstanceService {
 
         saveRecord(instance, instance.getCurrentNodeKey(), null, userId,
                 ApprovalOperatorType.USER, ApprovalAction.WITHDRAW, reason);
+
+        ApprovalBizHandler handler = bizRegistry.find(instance.getBizType());
+        if (handler != null) {
+            instance.setStatus(ApprovalInstanceStatus.CANCELED.name());
+            handler.applyResult(instance, ApprovalInstanceStatus.CANCELED);
+            runLifecycle("onCanceled", handler, () -> handler.onCanceled(instance));
+        }
         log.info("[审批] 撤回实例: instanceId={}, applicant={}", instanceId, userId);
     }
 

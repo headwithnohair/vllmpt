@@ -13,7 +13,9 @@ public enum BizScene {
     COPYWRITING("文案生成"),
     IMAGE_AUDIT("图片审核"),
     PRODUCT_ANALYSIS("商品分析"),
-    REVIEW_ANALYSIS("评论分析");
+    REVIEW_ANALYSIS("评论分析"),
+    APPROVAL("审批"),
+    APPROVAL_MANAGER("审批-主管");
     
     private final String description;
     

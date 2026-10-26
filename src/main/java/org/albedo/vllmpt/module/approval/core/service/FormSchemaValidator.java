@@ -65,6 +65,36 @@ public class FormSchemaValidator {
         }
     }
 
+    /**
+     * 计算缺失的必填字段名（供草稿/AI 填表使用，不抛异常）。
+     */
+    public List<String> missingFields(String schemaJson, Map<String, Object> form) {
+        if (StrUtil.isBlank(schemaJson)) {
+            return List.of();
+        }
+        JsonNode schema;
+        try {
+            schema = objectMapper.readTree(schemaJson);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "表单 Schema 解析失败");
+        }
+        JsonNode fields = schema.path("fields");
+        if (!fields.isArray()) {
+            return List.of();
+        }
+        List<String> missing = new ArrayList<>();
+        for (JsonNode field : fields) {
+            String name = field.path("name").asText("");
+            if (StrUtil.isBlank(name) || !field.path("required").asBoolean(false)) {
+                continue;
+            }
+            if (isEmpty(form.get(name))) {
+                missing.add(name);
+            }
+        }
+        return missing;
+    }
+
     private boolean isEmpty(Object value) {
         if (value == null) {
             return true;
