@@ -43,6 +43,17 @@ public class LeaveBalanceService {
     }
 
     /**
+     * 总额度减已使用（包含当前已锁定的额度），用于 AI 决策时复核余额。
+     */
+    public BigDecimal totalAvailable(Long userId, LeaveType type, int year) {
+        LeaveBalance balance = find(userId, type, year);
+        if (balance == null) {
+            return BigDecimal.ZERO;
+        }
+        return nullToZero(balance.getTotalDays()).subtract(nullToZero(balance.getUsedDays()));
+    }
+
+    /**
      * 提交时锁定余额；余额不足直接拒绝。
      */
     public void lock(Long userId, LeaveType type, BigDecimal days, int year) {

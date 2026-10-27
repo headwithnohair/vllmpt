@@ -118,6 +118,20 @@ ai:
     enabled: true
     max-retries: 2
     retry-delay: 1000  # 毫秒
+# 通用审批平台：AI 决策（P3）
+approval:
+  ai:
+    # 关闭后 AI_DECISION 节点一律转人工
+    enabled: true
+    model-name: ${APPROVAL_AI_MODEL:Qwen/Qwen3.6-35B-A3B}
+    temperature: 0.0
+    max-tokens: 1024
+    # 模型调用超时（秒），超时按失败转人工
+    timeout-seconds: 10
+    # 节点未配置 aiMinConfidence 时使用
+    default-min-confidence: 0.80
+    prompt-version: v1
+
 langchain4j:
   open-ai:
     chat-model:

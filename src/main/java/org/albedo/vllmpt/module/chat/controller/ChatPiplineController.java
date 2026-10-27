@@ -224,6 +224,10 @@ public class ChatPiplineController {
         ctx.setUserId(resolveUserIdLong(mpc));
         ctx.setBizType(StrUtil.trim(mpc.getBizType()));
         if (StrUtil.isNotBlank(ctx.getBizType())) {
+            if (ctx.getUserId() == null) {
+                ctx.interrupt("审批对话需要用户身份，请通过 X-User-Id 指定用户");
+                return ctx;
+            }
             // 审批场景：专用提示词 + 只暴露 approval 工具组
             ctx.setBizScene(BizScene.APPROVAL);
             ctx.setToolGroup("approval");

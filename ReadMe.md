@@ -456,6 +456,7 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 - 通用审批平台 P0：模板 CRUD/发布/下线、实例提交与重新提交、ANY/ALL/SEQUENTIAL、条件跳过、抄送查询/已读、Redis 单号与提交幂等；
 - 审批 P1：`ApprovalBizHandler` SPI、请假业务插件（工作日/半天、余额锁定与结算、时间重叠/病假证明校验）、Redis 填表草稿、请假业务接口；
 - 审批 P2：AI 填表（`bizType` 路由、审批提示词、`approval` 工具组、草稿/提交/查询/撤回工具）；
+- 审批 P3：AI 决策（硬规则 + LLM 灰区、`approval_ai_decision` 审计快照、失败/低置信度/高风险转人工）；
 - RocketMQ 大文件解析基础设施：生产者、台账、文本解析、DLQ 消费者。
 
 ### 开发中 / 未完成（以代码注释与文档为准）
@@ -472,7 +473,7 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 | 对话摘要压缩 | 规划中，窗口满 10 条后由小模型总结 |
 | 文件异步入库 | 生产者/台账/文本解析/DLQ 已完成；向量化消费者与超时检查为骨架，进度 SSE 未开发 |
 | 混合检索 | ES 索引与双写门面就绪；`bm25Search` / `rrfFuse` 仍为 TODO（接口返回 500） |
-| 审批平台 P3+ | P0–P2 已完成：引擎、SPI/请假、AI 填表；AI 决策（P3）、差旅费/会议室业务未开始 |
+| 审批平台 P4+ | P0–P3 已完成：引擎、SPI/请假、AI 填表、AI 决策；差旅费/会议室业务与通知渠道未开始 |
 | 主动取消 | S3 设计完成，未开工 |
 | 多环境 | 仅有 dev，test/prod 配置缺失 |
 

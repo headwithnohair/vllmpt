@@ -99,7 +99,8 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                 .stepCount(0)
                 .currentMessages(allMessages)
                 .build();
-        List<ToolSpecification> specs=  registry.allSpecs();
+        // 通用多模态入口只暴露 public 工具，审批工具只在 bizType 对话中开放
+        List<ToolSpecification> specs = registry.specsByGroup("public");
         while(agentContext.getStepCount()<5)
         {
             log.info("计入循环{}",agentContext.getStepCount());
@@ -123,7 +124,8 @@ public class MultimodalAssistantImpl implements MultimodalAssistant {
                    log.info("调用工具: {}  参数: {}", toolReq.name(), toolReq.arguments());
 
                    // ★ 执行工具，拿到结果
-                   String result = registry.execute(toolReq);
+                   // 安全执行：工具异常只返回错误文本，不阻断对话
+                   String result = registry.executeSafely(toolReq);
 
                    log.info("工具返回: {}", result);
 

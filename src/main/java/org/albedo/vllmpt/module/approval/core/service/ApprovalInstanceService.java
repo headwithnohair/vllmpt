@@ -14,6 +14,7 @@ import org.albedo.vllmpt.module.approval.core.domain.dto.InstanceDetailVO;
 import org.albedo.vllmpt.module.approval.core.domain.dto.ResubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.SubmitInstanceRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalCc;
+import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalAiDecision;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalInstance;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalRecord;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalTask;
@@ -25,6 +26,7 @@ import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalTaskStatus;
 import org.albedo.vllmpt.module.approval.core.domain.enums.ApprovalTemplateStatus;
 import org.albedo.vllmpt.module.approval.core.engine.ApprovalEngine;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalCcMapper;
+import org.albedo.vllmpt.module.approval.core.mapper.ApprovalAiDecisionMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalInstanceMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalRecordMapper;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalTaskMapper;
@@ -57,6 +59,7 @@ public class ApprovalInstanceService {
     private final ApprovalTaskMapper taskMapper;
     private final ApprovalRecordMapper recordMapper;
     private final ApprovalCcMapper ccMapper;
+    private final ApprovalAiDecisionMapper aiDecisionMapper;
     private final ApprovalTemplateService templateService;
     private final ApprovalEngine engine;
     private final FormSchemaValidator formSchemaValidator;
@@ -256,6 +259,9 @@ public class ApprovalInstanceService {
         vo.setCcs(ccMapper.selectList(Wrappers.<ApprovalCc>lambdaQuery()
                 .eq(ApprovalCc::getInstanceId, instanceId)
                 .orderByAsc(ApprovalCc::getId)));
+        vo.setAiDecisions(aiDecisionMapper.selectList(Wrappers.<ApprovalAiDecision>lambdaQuery()
+                .eq(ApprovalAiDecision::getInstanceId, instanceId)
+                .orderByAsc(ApprovalAiDecision::getId)));
         return vo;
     }
 

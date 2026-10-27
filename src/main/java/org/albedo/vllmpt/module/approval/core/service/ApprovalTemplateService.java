@@ -267,6 +267,14 @@ public class ApprovalTemplateService {
                     validateAssigneeConfig(node);
                 }
                 case AI_DECISION -> {
+                    if (StrUtil.isBlank(node.getAiPolicyKey())) {
+                        throw new BusinessException(400,
+                                "AI 决策节点必须配置 aiPolicyKey: " + node.getNodeKey());
+                    }
+                    if (StrUtil.isBlank(node.getAiOnEscalateNodeKey())) {
+                        throw new BusinessException(400,
+                                "AI 决策节点必须配置 aiOnEscalateNodeKey: " + node.getNodeKey());
+                    }
                     validateNodeRef(nodeKeys, node.getAiOnApproveNodeKey(), node.getNodeKey());
                     validateNodeRef(nodeKeys, node.getAiOnEscalateNodeKey(), node.getNodeKey());
                 }

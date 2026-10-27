@@ -192,6 +192,28 @@ CREATE TABLE IF NOT EXISTS `approval_cc` (
   KEY `idx_receiver` (`receiver_id`, `read_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审批抄送表';
 
+CREATE TABLE IF NOT EXISTS `approval_ai_decision` (
+  `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `instance_id`     BIGINT       NOT NULL                COMMENT '审批实例 ID',
+  `node_key`        VARCHAR(64)  NOT NULL                COMMENT 'AI 决策节点',
+  `decision_no`     INT          NOT NULL DEFAULT 1      COMMENT '同节点决策序号',
+  `policy_key`      VARCHAR(64)  NOT NULL                COMMENT '决策策略',
+  `decision`        VARCHAR(16)  NOT NULL                COMMENT 'APPROVE/REJECT/ESCALATE',
+  `confidence`      DECIMAL(4,3) DEFAULT NULL            COMMENT '置信度 0~1',
+  `risk_level`      VARCHAR(16)  DEFAULT NULL            COMMENT 'LOW/MEDIUM/HIGH',
+  `facts_snapshot`  JSON         DEFAULT NULL            COMMENT '事实快照',
+  `rule_result`     JSON         DEFAULT NULL            COMMENT '规则命中',
+  `llm_output`      JSON         DEFAULT NULL            COMMENT 'LLM 原始输出',
+  `model_name`      VARCHAR(128) DEFAULT NULL            COMMENT '模型名',
+  `prompt_version`  VARCHAR(32)  DEFAULT NULL            COMMENT 'Prompt 版本',
+  `policy_version`  VARCHAR(32)  DEFAULT NULL            COMMENT '策略版本',
+  `latency_ms`      INT          DEFAULT NULL            COMMENT '决策耗时（毫秒）',
+  `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_instance_node_decision` (`instance_id`, `node_key`, `decision_no`),
+  KEY `idx_instance` (`instance_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='AI 决策审计快照';
+
 
 -- ==========================================
 -- 演示数据（仅开发环境，固定 ID）
@@ -232,9 +254,9 @@ ON DUPLICATE KEY UPDATE `role_code` = VALUES(`role_code`);
 
 
 -- ------------------------------------------
--- 演示模板 1：请假（P1 请假业务插件接管校验与余额）
+-- 演示模板 1：请假（P1 请假业务插件接管校验与余额，P3 AI 决策）
 -- START → AI_DECISION → 直属主管(ANY) → CC(HR) → END
--- AI 决策未接入时 P0 固定走转人工分支
+-- AI 决策策略未注册/异常/低置信度时转人工
 -- ------------------------------------------
 INSERT INTO `approval_template`
   (`id`, `template_key`, `biz_type`, `name`, `version`, `status`, `form_schema`, `description`, `ai_fill_enabled`, `created_by`, `deleted`)

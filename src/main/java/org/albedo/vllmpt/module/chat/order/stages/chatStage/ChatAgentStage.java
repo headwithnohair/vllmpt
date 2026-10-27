@@ -93,10 +93,6 @@ public class ChatAgentStage implements ChatPipelineStage<ChatPipelineContext> {
 
         List<ToolSpecification> specs = toolRegistry.specsByGroup(
                 StrUtil.isBlank(context.getToolGroup()) ? "public" : context.getToolGroup().trim());
-        if (specs.isEmpty() && StrUtil.isBlank(context.getToolGroup())) {
-            // 兼容历史数据：没有分组时退回全量工具
-            specs = toolRegistry.allSpecs();
-        }
 
         List<ChatMessage> messages = new ArrayList<>(sourceMessages);
         AiMessage finalResult = null;
