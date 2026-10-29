@@ -7,6 +7,7 @@ import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateCreateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateDetailVO;
 import org.albedo.vllmpt.module.approval.core.domain.dto.TemplateUpdateRequest;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalTemplate;
+import org.albedo.vllmpt.module.approval.core.service.ApprovalAdminGuard;
 import org.albedo.vllmpt.module.approval.core.service.ApprovalTemplateService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,14 +31,17 @@ import java.util.List;
 public class ApprovalTemplateController {
 
     private final ApprovalTemplateService templateService;
+    private final ApprovalAdminGuard adminGuard;
 
     @PostMapping
     public Result<Long> create(@Valid @RequestBody TemplateCreateRequest request) {
+        adminGuard.requireAdmin();
         return Result.success(templateService.create(request));
     }
 
     @PostMapping("/{id}/publish")
     public Result<Void> publish(@PathVariable("id") Long id) {
+        adminGuard.requireAdmin();
         templateService.publish(id);
         return Result.success();
     }
@@ -48,6 +52,7 @@ public class ApprovalTemplateController {
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable("id") Long id,
                                @Valid @RequestBody TemplateUpdateRequest request) {
+        adminGuard.requireAdmin();
         templateService.update(id, request);
         return Result.success();
     }
@@ -57,6 +62,7 @@ public class ApprovalTemplateController {
      */
     @PostMapping("/{id}/disable")
     public Result<Void> disable(@PathVariable("id") Long id) {
+        adminGuard.requireAdmin();
         templateService.disable(id);
         return Result.success();
     }

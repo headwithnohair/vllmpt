@@ -59,9 +59,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 # 日志配置
@@ -123,6 +123,8 @@ approval:
   ai:
     # 关闭后 AI_DECISION 节点一律转人工
     enabled: true
+    # 灰度比例 0-100，按实例 ID 稳定分桶；100 为全量，0 为全部转人工
+    rollout-percent: 100
     model-name: ${APPROVAL_AI_MODEL:Qwen/Qwen3.6-35B-A3B}
     temperature: 0.0
     max-tokens: 1024
@@ -131,6 +133,16 @@ approval:
     # 节点未配置 aiMinConfidence 时使用
     default-min-confidence: 0.80
     prompt-version: v1
+
+# 身份与 JWT
+app:
+  jwt:
+    # 生产必须通过环境变量注入至少 32 字节随机密钥
+    secret: ${JWT_SECRET:change-me-change-me-change-me-123456}
+    issuer: vllmpt
+    expiration-minutes: 120
+    # 开发期换取 token；生产必须保持 false
+    dev-token-enabled: false
 
 langchain4j:
   open-ai:

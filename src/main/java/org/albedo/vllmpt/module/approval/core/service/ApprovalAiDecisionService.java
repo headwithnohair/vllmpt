@@ -36,6 +36,7 @@ public class ApprovalAiDecisionService {
     private final ApprovalRecordMapper recordMapper;
     private final ObjectMapper objectMapper;
     private final ApprovalAiProperties properties;
+    private final ApprovalAiMetrics metrics;
 
     public void save(ApprovalInstance instance, ApprovalTemplateNode node,
                      AiDecisionResult result, long latencyMs) {
@@ -68,6 +69,8 @@ public class ApprovalAiDecisionService {
         record.setComment(StrUtil.maxLength(result.reason(), 1000));
         record.setCreatedAt(LocalDateTime.now());
         recordMapper.insert(record);
+
+        metrics.record(result.decision(), latencyMs);
 
         log.info("[审批AI] 审计完成: instanceId={}, node={}, decision={}, confidence={}, latency={}ms",
                 instance.getId(), node.getNodeKey(), result.decision(),

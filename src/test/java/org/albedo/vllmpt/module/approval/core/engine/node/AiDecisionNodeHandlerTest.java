@@ -36,6 +36,7 @@ class AiDecisionNodeHandlerTest {
     private ApprovalAiDecisionRegistry registry;
     private ApprovalAiDecisionService decisionService;
     private ApprovalAiDecisionProvider provider;
+    private ApprovalAiProperties properties;
     private AiDecisionNodeHandler handler;
 
     @BeforeEach
@@ -43,7 +44,8 @@ class AiDecisionNodeHandlerTest {
         registry = mock(ApprovalAiDecisionRegistry.class);
         decisionService = mock(ApprovalAiDecisionService.class);
         provider = mock(ApprovalAiDecisionProvider.class);
-        handler = new AiDecisionNodeHandler(registry, decisionService, new ApprovalAiProperties());
+        properties = new ApprovalAiProperties();
+        handler = new AiDecisionNodeHandler(registry, decisionService, properties);
     }
 
     @Test
@@ -74,6 +76,31 @@ class AiDecisionNodeHandlerTest {
         ArgumentCaptor<AiDecisionResult> captor = ArgumentCaptor.forClass(AiDecisionResult.class);
         verify(decisionService).save(any(), eq(node), captor.capture(), anyLong());
         assertEquals(AiDecision.ESCALATE, captor.getValue().decision());
+    }
+
+    @Test
+    void aiDisabledEscalatesWithoutCallingProvider() {
+        properties.setEnabled(false);
+        ApprovalTemplateNode node = node("cc_hr", "manager_approval", "REJECT");
+
+        NodeResult result = handler.handle(context(node), node);
+
+        assertEquals("manager_approval", result.nextNodeKey());
+        verify(registry, never()).find(any());
+        ArgumentCaptor<AiDecisionResult> captor = ArgumentCaptor.forClass(AiDecisionResult.class);
+        verify(decisionService).save(any(), eq(node), captor.capture(), anyLong());
+        assertEquals(AiDecision.ESCALATE, captor.getValue().decision());
+    }
+
+    @Test
+    void grayMissEscalatesWithoutCallingProvider() {
+        properties.setRolloutPercent(0);
+        ApprovalTemplateNode node = node("cc_hr", "manager_approval", "REJECT");
+
+        NodeResult result = handler.handle(context(node), node);
+
+        assertEquals("manager_approval", result.nextNodeKey());
+        verify(registry, never()).find(any());
     }
 
     @Test

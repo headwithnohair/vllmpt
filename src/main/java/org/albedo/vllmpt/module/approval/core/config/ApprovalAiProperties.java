@@ -15,6 +15,9 @@ public class ApprovalAiProperties {
     /** 总开关；关闭后 AI 决策一律转人工 */
     private boolean enabled = true;
 
+    /** 灰度比例 0-100，按实例 ID 稳定分桶；100 为全量 */
+    private int rolloutPercent = 100;
+
     private String modelName = "Qwen/Qwen3.6-35B-A3B";
 
     private double temperature = 0.0;
@@ -27,4 +30,15 @@ public class ApprovalAiProperties {
     private double defaultMinConfidence = 0.80;
 
     private String promptVersion = "v1";
+
+    public boolean allows(Long instanceId) {
+        if (rolloutPercent >= 100) {
+            return true;
+        }
+        if (rolloutPercent <= 0) {
+            return false;
+        }
+        long bucket = Math.floorMod(instanceId == null ? 0L : instanceId, 100L);
+        return bucket < rolloutPercent;
+    }
 }

@@ -10,6 +10,7 @@ import org.albedo.vllmpt.module.approval.core.domain.model.NodeResult;
 import org.albedo.vllmpt.module.approval.core.engine.NodeHandler;
 import org.albedo.vllmpt.module.approval.core.engine.assignee.AssigneeResolverRegistry;
 import org.albedo.vllmpt.module.approval.core.mapper.ApprovalCcMapper;
+import org.albedo.vllmpt.module.approval.core.service.ApprovalNotifyService;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -28,6 +29,7 @@ public class CcNodeHandler implements NodeHandler {
 
     private final AssigneeResolverRegistry resolverRegistry;
     private final ApprovalCcMapper ccMapper;
+    private final ApprovalNotifyService notifyService;
 
     @Override
     public ApprovalNodeType supportType() {
@@ -47,7 +49,12 @@ public class CcNodeHandler implements NodeHandler {
         for (AssigneeSpec spec : specs) {
             List<Long> receivers = resolverRegistry.resolve(spec, ctx.instance(), ctx.facts());
             for (Long receiverId : receivers) {
-                ccMapper.insertIgnore(ctx.instance().getId(), node.getNodeKey(), receiverId, DEFAULT_CHANNEL, now);
+                int rows = ccMapper.insertIgnore(ctx.instance().getId(), node.getNodeKey(),
+                        receiverId, DEFAULT_CHANNEL, now);
+                if (rows > 0) {
+                    // 通知失败不影响审批主流程，Service 内部已吞掉异常
+                    notifyService.sendCc(ctx.instance(), node, receiverId);
+                }
             }
         }
         return NodeResult.pass();

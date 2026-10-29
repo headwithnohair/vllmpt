@@ -1,6 +1,7 @@
 package org.albedo.vllmpt.module.approval.core.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.albedo.vllmpt.module.approval.core.config.ApprovalAiProperties;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalAiDecision;
 import org.albedo.vllmpt.module.approval.core.domain.entity.ApprovalInstance;
@@ -39,7 +40,7 @@ class ApprovalAiDecisionServiceTest {
         ApprovalAiProperties properties = new ApprovalAiProperties();
         properties.setPromptVersion("v1");
         service = new ApprovalAiDecisionService(decisionMapper, recordMapper,
-                new ObjectMapper(), properties);
+                new ObjectMapper(), properties, new ApprovalAiMetrics(new SimpleMeterRegistry()));
     }
 
     @Test

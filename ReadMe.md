@@ -63,7 +63,7 @@
 | 会话互斥 | 同 `sessionId` 串行化推理（Redisson RLock + 看门狗续期） | 已实现 |
 | 文件服务 | MinIO 预签名直传、ETag 校验、桶迁移归档、并发/磁盘保护 | 已实现 |
 | Token 配额 | 每日 Token 原子预扣与结算、按模型用量统计 | 部分实现（详见状态） |
-| JWT 认证 | Spring Security + JWT 无状态认证 | 未接入（当前全路径放行） |
+| JWT 认证 | Spring Security + JWT 无状态认证（Bearer Token；开发期可用 X-User-Id） | 已实现 |
 
 ---
 
@@ -76,7 +76,7 @@
 | Java | 21（启用 Preview 特性） | 开发语言 |
 | Spring Boot | 4.0.6 | 应用框架 |
 | Spring WebFlux | - | SSE 流式响应（Reactor `Flux`） |
-| Spring Security | - | 认证鉴权框架（骨架就绪） |
+| Spring Security | - | 认证鉴权框架（JWT + 无状态） |
 | Spring Validation | - | 参数校验 |
 | MyBatis-Plus | 3.5.15 | ORM（逻辑删除、字段自动映射） |
 | Lombok / Hutool / Commons-Lang3 | - | 工具库 |
@@ -335,6 +335,8 @@ curl -N -X POST http://localhost:8080/api/pipline/stream \
 | `ai.concurrent.*` | application-dev.yml | 单用户并发推理限制（`limit` / `window-seconds` / `key-ttl-seconds`） |
 | `ai.quota.*` | application-dev.yml | 每日 Token 配额（预估扣减、默认额度、缓存与计数器 TTL） |
 | `app.identity.*` | application-dev.yml | 开发期身份（`X-User-Id` 缺失时的默认用户） |
+| `app.jwt.*` | application.yml / 环境变量 | JWT 密钥（`JWT_SECRET`，至少 32 字节）、签发者、有效期、开发 token 开关 |
+| `approval.ai.*` | application.yml | AI 决策开关、灰度比例、模型、超时与最低置信度 |
 | `app.file-task.*` | application-dev.yml | 大文件任务进度 TTL 与阶段超时 |
 | `app.alert.*` | application-dev.yml | 钉钉/飞书告警 webhook |
 | `langchain4j.open-ai.chat-model.*` | application.yml / dev | 对话模型（base-url / api-key / model-name / timeout / temperature / max-tokens） |
@@ -378,6 +380,8 @@ curl -N -X POST http://localhost:8080/api/pipline/stream \
 | 审批-抄送 | `/api/approval/cc/*` | 抄送我的 / 标记已读 |
 | 审批-草稿 | `/api/approval/draft` | 填表草稿保存/查询/删除（含缺失字段） |
 | 审批-请假 | `/api/leave/*` | 请假提交/详情/我的/撤回/余额 |
+| 审批-差旅 | `/api/travel/*` | 差旅费提交/详情/我的/撤回 |
+| 审批-会议室 | `/api/meeting/*` | 会议室预约提交/详情/我的/撤回 |
 | 运维 | `/stat/*`、`/actuator/*` | 自检与监控 |
 
 常见业务码：`400` 参数/状态不允许、`402` Token 额度不足、`403` 越权、`404` 不存在、`409` 状态已变化/会话占用、`429` 并发超限/审批处理中、`505` 流水线中断。
@@ -457,13 +461,15 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 - 审批 P1：`ApprovalBizHandler` SPI、请假业务插件（工作日/半天、余额锁定与结算、时间重叠/病假证明校验）、Redis 填表草稿、请假业务接口；
 - 审批 P2：AI 填表（`bizType` 路由、审批提示词、`approval` 工具组、草稿/提交/查询/撤回工具）；
 - 审批 P3：AI 决策（硬规则 + LLM 灰区、`approval_ai_decision` 审计快照、失败/低置信度/高风险转人工）；
+- 审批 P4：差旅费/会议室业务插件、会议室行锁防并发、INBOX 抄送通知发件箱；
+- 审批 P5：JWT/开发期身份、模板 ADMIN 权限、越权单测、ArchUnit 分层约束、AI 决策指标、OpenAPI 文档；
 - RocketMQ 大文件解析基础设施：生产者、台账、文本解析、DLQ 消费者。
 
 ### 开发中 / 未完成（以代码注释与文档为准）
 
 | 能力 | 现状 |
 |------|------|
-| JWT 认证 | `WebSecurityConfig` 当前对 `/**` 全部放行，JWT 过滤器未接入 |
+| JWT 生产接入 | Bearer Token 验签已实现；生产仍需注入 `JWT_SECRET`，并关闭默认用户/开发 token 接口 |
 | 每日 Token 配额 | `TokenQuotaService` 的 `preDeduct`/`settle`、`QuotaLimitResolver` 部分未接线/未实现 |
 | 视频处理 | `VideoProcessor` 返回硬编码文本，未接入真实视频理解 |
 | PDF 解析 | `PdfBoxDocumentExtractor.extractText` 返回空字符串（待实现） |
@@ -473,7 +479,7 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 | 对话摘要压缩 | 规划中，窗口满 10 条后由小模型总结 |
 | 文件异步入库 | 生产者/台账/文本解析/DLQ 已完成；向量化消费者与超时检查为骨架，进度 SSE 未开发 |
 | 混合检索 | ES 索引与双写门面就绪；`bm25Search` / `rrfFuse` 仍为 TODO（接口返回 500） |
-| 审批平台 P4+ | P0–P3 已完成：引擎、SPI/请假、AI 填表、AI 决策；差旅费/会议室业务与通知渠道未开始 |
+| 审批平台 P5 | 已完成：JWT、模板 ADMIN 权限、越权/并发测试、ArchUnit、AI 指标、OpenAPI；外部通知渠道待扩展 |
 | 主动取消 | S3 设计完成，未开工 |
 | 多环境 | 仅有 dev，test/prod 配置缺失 |
 
@@ -485,7 +491,7 @@ ChatMemoryStage → ChatRagSearchStage → ChatFileStage
 请先执行 `docker compose -f doc/docker/docker-compose-env.yml up -d` 启动依赖，并核对 `application-dev.yml` 中的连接信息与端口。
 
 **Q2：调用对话接口返回 401 或空响应？**
-当前 `WebSecurityConfig` 对 `/**` 放行，一般不会 401；若模型无响应，请确认 `langchain4j.open-ai.chat-model.api-key` 已配置（或设置了 `SILICONFLOW_API_KEY`）且网络可访问 `https://api.siliconflow.cn/v1`。
+业务接口默认要求认证：开发环境可带 `X-User-Id`，或先 `POST /api/auth/token` 换取 JWT 后带 `Authorization: Bearer`；JWT 验签失败/过期会直接 401。若模型无响应，请确认 `langchain4j.open-ai.chat-model.api-key` 已配置且网络可访问 `https://api.siliconflow.cn/v1`。
 
 **Q3：向量化 / 检索报错？**
 请确认 Chroma 服务（默认 `http://localhost:8000`）已启动，且 `app.vector-store.*` 配置正确。测试环境无向量服务时，`ChatRagSearchStage` 会自动降级为通用提示词而不阻断对话。
@@ -557,4 +563,4 @@ fix(rag): 修复分块边界丢字问题
 
 ---
 
-<p align="right">最后更新：2026-10-26</p>
+<p align="right">最后更新：2026-10-29</p>

@@ -1,5 +1,5 @@
 -- ==========================================
--- 通用审批平台 P0 建表与演示数据
+-- 通用审批平台 P0/P1/P3/P4 建表与演示数据
 --
 -- 执行方式（二选一）：
 --   1) 用 MySQL 客户端直接打开本文件执行
@@ -214,6 +214,88 @@ CREATE TABLE IF NOT EXISTS `approval_ai_decision` (
   KEY `idx_instance` (`instance_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='AI 决策审计快照';
 
+-- ------------------------------------------
+-- 业务表：差旅费 / 会议室
+-- ------------------------------------------
+CREATE TABLE IF NOT EXISTS `travel_expense` (
+  `id`                   BIGINT        NOT NULL AUTO_INCREMENT,
+  `approval_instance_id` BIGINT        DEFAULT NULL,
+  `applicant_id`         BIGINT        NOT NULL,
+  `destination`          VARCHAR(128)  NOT NULL,
+  `start_date`           DATE          NOT NULL,
+  `end_date`             DATE          NOT NULL,
+  `estimated_amount`     DECIMAL(12,2) NOT NULL,
+  `currency`             VARCHAR(8)    NOT NULL DEFAULT 'CNY',
+  `cost_center`          VARCHAR(64)   DEFAULT NULL,
+  `reason`               VARCHAR(500)  NOT NULL,
+  `invoice_urls`         JSON          DEFAULT NULL,
+  `approval_status`      VARCHAR(16)   NOT NULL DEFAULT 'RUNNING',
+  `deleted`              TINYINT       NOT NULL DEFAULT 0,
+  `created_at`           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_travel_instance` (`approval_instance_id`),
+  KEY `idx_travel_applicant` (`applicant_id`, `start_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='差旅费申请业务表';
+
+CREATE TABLE IF NOT EXISTS `meeting_room` (
+  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+  `room_code`  VARCHAR(32)  NOT NULL,
+  `name`       VARCHAR(128) NOT NULL,
+  `capacity`   INT          NOT NULL DEFAULT 0,
+  `location`   VARCHAR(128) DEFAULT NULL,
+  `enabled`    TINYINT      NOT NULL DEFAULT 1,
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_room_code` (`room_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会议室主数据';
+
+CREATE TABLE IF NOT EXISTS `meeting_room_booking` (
+  `id`                   BIGINT      NOT NULL AUTO_INCREMENT,
+  `approval_instance_id` BIGINT      DEFAULT NULL,
+  `applicant_id`         BIGINT      NOT NULL,
+  `room_id`              BIGINT      NOT NULL,
+  `start_time`           DATETIME    NOT NULL,
+  `end_time`             DATETIME    NOT NULL,
+  `attendees`            INT         NOT NULL DEFAULT 1,
+  `purpose`              VARCHAR(500) NOT NULL,
+  `equipment`            JSON        DEFAULT NULL,
+  `has_external_guest`   TINYINT     NOT NULL DEFAULT 0,
+  `approval_status`      VARCHAR(16) NOT NULL DEFAULT 'RUNNING',
+  `deleted`              TINYINT     NOT NULL DEFAULT 0,
+  `created_at`           DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`           DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_meeting_instance` (`approval_instance_id`),
+  KEY `idx_room_time` (`room_id`, `start_time`, `end_time`),
+  KEY `idx_meeting_status` (`approval_status`, `start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会议室预约业务表';
+
+-- ------------------------------------------
+-- 通知发件箱
+-- ------------------------------------------
+CREATE TABLE IF NOT EXISTS `approval_notification` (
+  `id`            BIGINT       NOT NULL AUTO_INCREMENT,
+  `notify_key`    VARCHAR(128) NOT NULL COMMENT '幂等键',
+  `instance_id`   BIGINT       DEFAULT NULL,
+  `task_id`       BIGINT       DEFAULT NULL,
+  `receiver_id`   BIGINT       NOT NULL,
+  `notify_type`   VARCHAR(24)  NOT NULL COMMENT 'TODO/CC/RESULT/REMIND',
+  `channel`       VARCHAR(16)  NOT NULL DEFAULT 'INBOX',
+  `title`         VARCHAR(200) DEFAULT NULL,
+  `content`       VARCHAR(2000) DEFAULT NULL,
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+  `retry_count`   INT          NOT NULL DEFAULT 0,
+  `next_retry_at` DATETIME     DEFAULT NULL,
+  `sent_at`       DATETIME     DEFAULT NULL,
+  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_notify_key` (`notify_key`),
+  KEY `idx_notify_receiver` (`receiver_id`, `type`, `created_at`),
+  KEY `idx_notify_retry` (`status`, `next_retry_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='审批通知发件箱';
+
 
 -- ==========================================
 -- 演示数据（仅开发环境，固定 ID）
@@ -249,7 +331,9 @@ VALUES
   (2, 'MANAGER', 0),
   (3, 'FINANCE', 0),
   (4, 'HR', 0),
-  (5, 'CFO', 0)
+  (5, 'CFO', 0),
+  -- 用户 5 同时具备 ADMIN，用于模板管理演示
+  (5, 'ADMIN', 0)
 ON DUPLICATE KEY UPDATE `role_code` = VALUES(`role_code`);
 
 
@@ -286,9 +370,9 @@ ON DUPLICATE KEY UPDATE `node_name` = VALUES(`node_name`), `node_type` = VALUES(
 INSERT INTO `approval_template`
   (`id`, `template_key`, `biz_type`, `name`, `version`, `status`, `form_schema`, `description`, `ai_fill_enabled`, `created_by`, `deleted`)
 VALUES
-  (2, 'travel_expense', 'TRAVEL_EXPENSE', '差旅费报销', 1, 'PUBLISHED',
-   '{"fields":[{"name":"tripCity","label":"出差城市","type":"STRING","required":true},{"name":"startDate","label":"开始日期","type":"DATE","required":true},{"name":"endDate","label":"结束日期","type":"DATE","required":true},{"name":"amount","label":"报销金额","type":"NUMBER","required":true},{"name":"reason","label":"出差事由","type":"STRING","required":true}]}',
-   '演示模板：金额分级与多级审批', 1, 1, 0)
+  (2, 'travel_expense', 'TRAVEL_EXPENSE', '差旅费申请', 1, 'PUBLISHED',
+   '{"fields":[{"name":"destination","label":"目的地","type":"STRING","required":true},{"name":"startDate","label":"开始日期","type":"DATE","required":true},{"name":"endDate","label":"结束日期","type":"DATE","required":true},{"name":"estimatedAmount","label":"预计金额","type":"NUMBER","required":true},{"name":"costCenter","label":"成本中心","type":"STRING","required":false},{"name":"reason","label":"出差事由","type":"STRING","required":true},{"name":"invoiceUrls","label":"发票/凭证","type":"ARRAY","required":false}]}',
+   'P4 差旅费业务：金额分级走财务/CFO，申请阶段校验日期与金额', 1, 1, 0)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`), `form_schema` = VALUES(`form_schema`);
 
 INSERT INTO `approval_template_node`
@@ -303,4 +387,36 @@ VALUES
   (10, 2, 'cfo_approval', 'CFO 审批', 'APPROVAL', 5, 'ROLE', '{"roleCode":"CFO"}', 'ANY', '{"field":"amount","op":"GT","value":20000}', NULL, NULL, NULL, NULL, NULL, NULL, 72, 1),
   (11, 2, 'cc_hr', '抄送 HR', 'CC', 6, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '[{"type":"ROLE","roleCode":"HR"}]', NULL, 1),
   (12, 2, 'end', '结束', 'END', 7, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1)
+ON DUPLICATE KEY UPDATE `node_name` = VALUES(`node_name`), `node_type` = VALUES(`node_type`), `sort_order` = VALUES(`sort_order`);
+
+
+-- ------------------------------------------
+-- 演示模板 3：会议室预约（P4）
+-- START → AI_DECISION → 行政管理员(HR, ANY) → CC(HR) → END
+-- ------------------------------------------
+INSERT INTO `meeting_room` (`id`, `room_code`, `name`, `capacity`, `location`, `enabled`)
+VALUES
+  (1, 'R301', '301 会议室', 10, '3F', 1),
+  (2, 'R302', '302 会议室', 20, '3F', 1),
+  (3, 'BOARD', '董事会议室', 30, '5F', 1)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `capacity` = VALUES(`capacity`), `enabled` = VALUES(`enabled`);
+
+INSERT INTO `approval_template`
+  (`id`, `template_key`, `biz_type`, `name`, `version`, `status`, `form_schema`, `description`, `ai_fill_enabled`, `created_by`, `deleted`)
+VALUES
+  (3, 'meeting_room', 'MEETING_ROOM', '会议室预约', 1, 'PUBLISHED',
+   '{"fields":[{"name":"roomId","label":"会议室ID","type":"NUMBER","required":true},{"name":"startTime","label":"开始时间","type":"STRING","required":true},{"name":"endTime","label":"结束时间","type":"STRING","required":true},{"name":"attendees","label":"参会人数","type":"NUMBER","required":true},{"name":"purpose","label":"会议用途","type":"STRING","required":true},{"name":"equipment","label":"设备需求","type":"ARRAY","required":false},{"name":"hasExternalGuest","label":"是否有外部访客","type":"BOOLEAN","required":false}]}',
+   'P4 会议室业务：容量/开放时间/冲突校验', 1, 1, 0)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`), `form_schema` = VALUES(`form_schema`);
+
+INSERT INTO `approval_template_node`
+  (`id`, `template_id`, `node_key`, `node_name`, `node_type`, `sort_order`, `assignee_type`, `assignee_config`,
+   `approval_mode`, `condition_json`, `ai_policy_key`, `ai_min_confidence`, `ai_on_approve_node_key`,
+   `ai_on_escalate_node_key`, `ai_on_reject_action`, `cc_config`, `sla_hours`, `enabled`)
+VALUES
+  (13, 3, 'start', '发起', 'START', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1),
+  (14, 3, 'ai_decision', 'AI 预审', 'AI_DECISION', 2, NULL, NULL, NULL, NULL, 'meetingRoomPolicy', 0.8500, 'cc_hr', 'manager_approval', 'REJECT', NULL, NULL, 1),
+  (15, 3, 'manager_approval', '行政管理员审批', 'APPROVAL', 3, 'ROLE', '{"roleCode":"HR"}', 'ANY', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 24, 1),
+  (16, 3, 'cc_hr', '抄送 HR', 'CC', 4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '[{"type":"ROLE","roleCode":"HR"}]', NULL, 1),
+  (17, 3, 'end', '结束', 'END', 5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1)
 ON DUPLICATE KEY UPDATE `node_name` = VALUES(`node_name`), `node_type` = VALUES(`node_type`), `sort_order` = VALUES(`sort_order`);

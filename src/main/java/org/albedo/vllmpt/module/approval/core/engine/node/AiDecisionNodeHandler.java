@@ -75,6 +75,14 @@ public class AiDecisionNodeHandler implements NodeHandler {
     }
 
     private AiDecisionResult decide(NodeHandleContext ctx, ApprovalTemplateNode node, double minConfidence) {
+        if (!properties.isEnabled()) {
+            return AiDecisionResult.escalate(0.0, RiskLevel.HIGH,
+                    "AI 决策未启用，转人工", List.of(), Map.of(), null, "disabled");
+        }
+        if (!properties.allows(ctx.instance().getId())) {
+            return AiDecisionResult.escalate(0.0, RiskLevel.HIGH,
+                    "AI 决策未命中灰度，转人工", List.of(), Map.of(), null, "gray");
+        }
         String policyKey = node.getAiPolicyKey();
         if (StrUtil.isBlank(policyKey)) {
             return AiDecisionResult.escalate(0.0, RiskLevel.HIGH,

@@ -129,11 +129,14 @@ springdoc:
     enabled: true
 # 向量数据库配置 (Chroma)
 app:
-  # 开发期身份：没有登录系统时通过 X-User-Id 请求头指定用户；
+  # 开发期身份：优先 JWT；没有登录系统时也可通过 X-User-Id 指定用户；
   # 未传时回退到默认用户，方便本地联调，生产环境必须关闭。
   identity:
     default-user-enabled: true
     default-user-id: 1
+  # 开发期换取 JWT；生产环境必须关闭
+  jwt:
+    dev-token-enabled: true
   vector-store:
     base-url: http://localhost:8000
     knowledge-base-collection: vllmpt_knowledge_base
